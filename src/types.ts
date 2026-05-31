@@ -212,6 +212,9 @@ export type SyncMode = "download" | "mirror" | "upload" | "two-way" | "manual";
  * - baseHash：上次同步成功时的内容哈希（base，三方对比的基准）
  * - localHash：上次同步时本地文件内容哈希（用于判断本地是否被改动）
  * - remoteModify：上次同步时云端的 modifyDate
+ *
+ * filePath 存相对项目根（配置文件所在目录）的相对路径，
+ * 因内容哈希本就跨机一致，相对路径让整个配置文件可随项目共享。
  */
 export interface SyncNoteState {
   id: string;
@@ -224,20 +227,20 @@ export interface SyncNoteState {
   empty?: boolean;
 }
 
-/** 单个同步目录的状态 */
-export interface SyncDirState {
-  output: string;
+/**
+ * 项目本地配置文件结构（项目根 `.mi-note-cli.json`）。
+ *
+ * 配置随项目走而非全局：一台机器可有多个项目各自同步，
+ * mode 等策略可随项目提交、在多人协作中共享。
+ * - output：同步目录，相对项目根的相对路径
+ * - mode：同步模式（缺省时回落到 manual）
+ * - notes/folders：同步基线状态，filePath 用相对路径，跨机一致
+ */
+export interface AppConfig {
+  output?: string;
   mode?: SyncMode;
-  lastSync: number | null;
+  lastSync?: number | null;
   syncTag?: string;
   notes: Record<string, SyncNoteState>;
   folders: Record<string, RawFolderEntry>;
-}
-
-/** 公共配置文件结构（config.json） */
-export interface AppConfig {
-  /** 全局默认同步模式 */
-  mode?: SyncMode;
-  /** 各同步目录的状态，以输出目录绝对路径为 key */
-  syncs: Record<string, SyncDirState>;
 }

@@ -4,7 +4,6 @@ import {
   sanitizeFileName,
   formatDateTime,
   getCacheDir,
-  getConfigDir,
   inferImageMimeType,
 } from "../src/utils.ts";
 import { extractCookieValue } from "../src/auth.ts";
@@ -30,11 +29,6 @@ test("formatDateTime: 格式正确", () => {
 
 test("getCacheDir: 含应用名", () => {
   assert.ok(getCacheDir().includes("mi-note-cli"));
-});
-
-test("getConfigDir: 含应用名且与缓存目录不同", () => {
-  assert.ok(getConfigDir().includes("mi-note-cli"));
-  assert.notEqual(getConfigDir(), getCacheDir());
 });
 
 test("inferImageMimeType: 常见类型", () => {

@@ -12,12 +12,12 @@ import {
 import { buildExtraInfoString } from "./note.js";
 import { randomDelay, ensureFileDir, fileExists, ensureDir } from "./utils.js";
 import { logInfo } from "./output.js";
-import { loadDirState, saveDirState } from "./config.js";
+import { loadDirState, saveDirState, toRelPath, toAbsPath } from "./config.js";
 import { classify, decide } from "./sync-diff.js";
 import type {
   RawNoteEntry,
   RawFolderEntry,
-  SyncDirState,
+  AppConfig,
   SyncNoteState,
   SyncMode,
   WriteNoteEntry,
@@ -177,7 +177,7 @@ export async function buildSyncPlan(
   quiet = false,
 ): Promise<{
   plan: SyncPlanItem[];
-  state: SyncDirState;
+  state: AppConfig;
   folders: Record<string, RawFolderEntry>;
 }> {
   const state = await loadDirState(outputDir);
@@ -202,10 +202,11 @@ export async function buildSyncPlan(
     const remote = remoteById.get(id);
     const base = state.notes[id];
 
-    // 先读本地（不依赖网络）
+    // 先读本地（不依赖网络）。state 里 filePath 为相对项目根路径，读写时转绝对。
     let localMarkdown: string | undefined;
     let localHash: string | undefined;
-    const filePath = base?.filePath ?? null;
+    const relFilePath = base?.filePath ?? null;
+    const filePath = relFilePath ? toAbsPath(relFilePath) : null;
     if (filePath && (await fileExists(filePath))) {
       localMarkdown = await readFile(filePath, "utf-8");
       localHash = computeHash(localMarkdown);
@@ -258,9 +259,10 @@ export async function buildSyncPlan(
 
   // 检测「本地新增文件」(#6)：输出目录下未被状态记录的 .md 文件。
   // 这些文件既不在云端 id 也不在状态 id 中，需单独扫描才能被上行同步发现。
+  // state 里 filePath 为相对项目根路径，比对前统一转绝对。
   const trackedPaths = new Set<string>();
   for (const n of Object.values(state.notes)) {
-    if (n.filePath) trackedPaths.add(resolvePath(n.filePath));
+    if (n.filePath) trackedPaths.add(toAbsPath(n.filePath));
   }
   const localFiles = await scanMarkdownFiles(outputDir);
   for (const fp of localFiles) {
@@ -293,7 +295,7 @@ export async function executeSyncPlan(
   outputDir: string,
   mode: SyncMode,
   plan: SyncPlanItem[],
-  state: SyncDirState,
+  state: AppConfig,
   folders: Record<string, RawFolderEntry>,
   opts: { dryRun?: boolean; quiet?: boolean; resolveConflict?: ConflictResolver } = {},
 ): Promise<SyncResult> {
@@ -368,7 +370,7 @@ async function applyAction(
   outputDir: string,
   action: SyncAction,
   item: SyncPlanItem,
-  state: SyncDirState,
+  state: AppConfig,
   folders: Record<string, RawFolderEntry>,
 ): Promise<void> {
   const id = item.id;
@@ -381,9 +383,10 @@ async function applyAction(
       // 下行：用云端覆盖/创建本地
       if (!item.remote || item.remoteMarkdown === undefined) return;
       const note = parseNoteEntry(item.remote);
-      const filePath = getNoteFilePath(note, folders, outputDir);
-      // 路径变化时清理旧文件
-      const oldPath = state.notes[id]?.filePath;
+      const filePath = getNoteFilePath(note, folders, outputDir); // 绝对路径
+      // 路径变化时清理旧文件（state 里 filePath 为相对，转绝对再比对/删除）
+      const oldRel = state.notes[id]?.filePath;
+      const oldPath = oldRel ? toAbsPath(oldRel) : null;
       if (oldPath && oldPath !== filePath && (await fileExists(oldPath))) {
         await rm(oldPath, { force: true });
       }
@@ -395,7 +398,7 @@ async function applyAction(
       state.notes[id] = {
         id,
         subject: note.subject,
-        filePath,
+        filePath: toRelPath(filePath),
         baseHash: computeHash(item.remoteMarkdown),
         localHash: computeHash(item.remoteMarkdown),
         remoteModify: item.remote.modifyDate,
@@ -405,8 +408,9 @@ async function applyAction(
 
     case "update-remote":
     case "create-remote": {
-      // 上行：用本地内容更新/创建云端
+      // 上行：用本地内容更新/创建云端。item.filePath 为绝对路径，存状态前转相对。
       if (item.localMarkdown === undefined) return;
+      const relPath = item.filePath ? toRelPath(item.filePath) : null;
       const xml = markdownToXml(item.localMarkdown);
       const now = Date.now();
       if (action === "create-remote") {
@@ -425,7 +429,7 @@ async function applyAction(
         state.notes[newId] = {
           id: newId,
           subject: firstLine(item.localMarkdown),
-          filePath: item.filePath,
+          filePath: relPath,
           baseHash: computeHash(item.localMarkdown),
           localHash: computeHash(item.localMarkdown),
           remoteModify: created.modifyDate,
@@ -455,7 +459,7 @@ async function applyAction(
         state.notes[id] = {
           id,
           subject: state.notes[id]?.subject ?? id,
-          filePath: item.filePath,
+          filePath: relPath,
           baseHash: computeHash(item.localMarkdown),
           localHash: computeHash(item.localMarkdown),
           remoteModify: updated.modifyDate,
@@ -529,11 +533,6 @@ async function scanMarkdownFiles(outputDir: string): Promise<string[]> {
     }
   }
   return result;
-}
-
-/** 创建空目录状态 */
-export function emptyDirState(outputDir: string): SyncDirState {
-  return { output: outputDir, lastSync: null, notes: {}, folders: {} };
 }
 
 export type { SyncNoteState };

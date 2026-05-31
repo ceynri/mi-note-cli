@@ -34,10 +34,7 @@ Sessions are **not** carried over. Run `mi-note-cli login` once to authenticate 
 ## Configuration & state
 
 - Old: `.mi-note-export.json` in the working dir + `.sync-state.json` inside the output dir.
-- New: a single JSON file in the OS config dir, holding global config + per-directory sync state:
-  - macOS: `~/Library/Application Support/mi-note-cli/config.json`
-  - Linux: `~/.config/mi-note-cli/config.json`
-  - Windows: `%APPDATA%\mi-note-cli\config.json`
+- New: a single `.mi-note-cli.json` at the project root, holding the sync mode + sync directory + per-note sync baseline state. Note paths are stored relative to the project root, so the config can be committed with the project and shared across devices/people.
 
 There is no automatic import of the old config. To replicate your old setup:
 

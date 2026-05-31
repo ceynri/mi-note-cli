@@ -92,11 +92,10 @@ The tool auto-converts `minote://image/{fileId}` into Xiaomi's image markup.
 ## Data Directories
 
 - **Session cache** (macOS): `~/Library/Caches/mi-note-cli/` (`cookie` + `browser-data/`; may be cleared by the system/user as cache — just log in again).
-- **Config & sync state** (persistent, not treated as cache):
-  - macOS: `~/Library/Application Support/mi-note-cli/config.json`
-  - Linux: `~/.config/mi-note-cli/config.json`
-  - Windows: `%APPDATA%\mi-note-cli\config.json`
-  - A single file holding the global default mode + per-sync-directory state (keyed by absolute path).
+- **Config & sync state**: `.mi-note-cli.json` at the project root (read/written in whatever directory you run the CLI from).
+  - A single file holding the sync mode + sync directory + per-note sync baseline state.
+  - Note paths are stored **relative to the project root**, so the config can be committed alongside the project and shared across people/devices, keeping the team's sync mode consistent.
+  - If you'd rather not version-control the sync state, add `.mi-note-cli.json` to your `.gitignore`.
 
 ## Known Limitations
 

@@ -81,32 +81,6 @@ export function getCacheDir(app: string = APP_NAME): string {
   }
 }
 
-/**
- * 获取全局配置目录（跨平台）——存放需持久保留的用户配置与同步状态，
- * 不应被系统当缓存清理。
- *
- * - macOS:   ~/Library/Application Support/mi-note-cli/
- * - Linux:   $XDG_CONFIG_HOME/mi-note-cli/ 或 ~/.config/mi-note-cli/
- * - Windows: %APPDATA%/mi-note-cli/
- */
-export function getConfigDir(app: string = APP_NAME): string {
-  const home = homedir();
-  switch (platform()) {
-    case "darwin":
-      return join(home, "Library", "Application Support", app);
-    case "win32":
-      return join(
-        process.env.APPDATA || join(home, "AppData", "Roaming"),
-        app,
-      );
-    default:
-      return join(
-        process.env.XDG_CONFIG_HOME || join(home, ".config"),
-        app,
-      );
-  }
-}
-
 /** 推断图片 MIME 类型 */
 export function inferImageMimeType(filename: string): string {
   const lower = filename.toLowerCase();

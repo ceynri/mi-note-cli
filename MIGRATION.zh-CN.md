@@ -34,10 +34,7 @@
 ## 配置与状态
 
 - 旧：工作目录的 `.mi-note-export.json` + 输出目录内的 `.sync-state.json`。
-- 新：操作系统配置目录下的单一 JSON 文件，集中存放全局配置 + 各目录同步状态：
-  - macOS: `~/Library/Application Support/mi-note-cli/config.json`
-  - Linux: `~/.config/mi-note-cli/config.json`
-  - Windows: `%APPDATA%\mi-note-cli\config.json`
+- 新：项目根目录下的单一 `.mi-note-cli.json`，存放同步模式 + 同步目录 + 各笔记的同步基线状态。笔记路径以相对项目根的相对路径记录，配置可随项目提交、跨设备/多人共享。
 
 不会自动导入旧配置。复刻旧设置：
 

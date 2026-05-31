@@ -6,10 +6,10 @@ import {
 } from "../sync.js";
 import {
   resolveMode,
-  setGlobalMode,
-  setDirMode,
+  setMode,
   loadConfig,
   getConfigPath,
+  toAbsPath,
   ALL_MODES,
 } from "../config.js";
 import { isJsonMode, success, logInfo, fail } from "../output.js";
@@ -115,8 +115,8 @@ export async function syncCommand(opts: SyncOptions): Promise<void> {
   }
 }
 
-/** sync init：交互引导设置默认模式 */
-export async function syncInitCommand(opts: { output?: string }): Promise<void> {
+/** sync init：交互引导设置项目默认模式 */
+export async function syncInitCommand(_opts: { output?: string }): Promise<void> {
   try {
     if (isJsonMode() || !process.stdout.isTTY) {
       throw new Error("init 需在交互式终端运行");
@@ -136,22 +136,11 @@ export async function syncInitCommand(opts: { output?: string }): Promise<void> 
     const mode: SyncMode =
       idx >= 1 && idx <= ALL_MODES.length ? ALL_MODES[idx - 1] : "manual";
 
-    const scope = await ask(
-      "应用范围：(g) 全局默认 / (d) 仅某个目录 [默认 g]: ",
-    );
-    let target = "全局";
-    if (scope.trim().toLowerCase() === "d") {
-      const dir = (await ask("目录路径: ")).trim();
-      if (!dir) throw new Error("目录不能为空");
-      await setDirMode(resolve(dir), mode);
-      target = resolve(dir);
-    } else {
-      await setGlobalMode(mode);
-    }
+    await setMode(mode);
     rl.close();
 
-    success({ mode, scope: target, configPath: getConfigPath() }, () => {
-      logInfo(`\n✅ 已设置 ${target} 默认模式为：${mode}`);
+    success({ mode, configPath: getConfigPath() }, () => {
+      logInfo(`\n✅ 已将项目默认同步模式设为：${mode}`);
       logInfo(`   配置文件：${getConfigPath()}`);
     });
   } catch (err) {
@@ -159,24 +148,24 @@ export async function syncInitCommand(opts: { output?: string }): Promise<void> 
   }
 }
 
-/** sync status：查看当前配置与各目录状态 */
+/** sync status：查看当前项目的同步配置与状态 */
 export async function syncStatusCommand(): Promise<void> {
   try {
     const config = await loadConfig();
     success(config, () => {
       logInfo(`配置文件：${getConfigPath()}`);
-      logInfo(`全局默认模式：${config.mode ?? "manual"}`);
-      const dirs = Object.values(config.syncs);
-      if (dirs.length === 0) {
-        logInfo("（暂无同步目录记录）");
+      logInfo(`同步模式：${config.mode ?? "manual（默认）"}`);
+      if (!config.output && Object.keys(config.notes).length === 0) {
+        logInfo("（暂无同步记录，尚未执行过 sync）");
         return;
       }
-      logInfo("\n同步目录：");
-      for (const d of dirs) {
-        const last = d.lastSync ? new Date(d.lastSync).toLocaleString("zh-CN") : "从未";
-        logInfo(`  ${d.output}`);
-        logInfo(`    模式: ${d.mode ?? "(跟随全局)"}  笔记: ${Object.keys(d.notes).length}  上次同步: ${last}`);
+      const last = config.lastSync
+        ? new Date(config.lastSync).toLocaleString("zh-CN")
+        : "从未";
+      if (config.output) {
+        logInfo(`同步目录：${config.output}  →  ${toAbsPath(config.output)}`);
       }
+      logInfo(`笔记记录：${Object.keys(config.notes).length}  上次同步：${last}`);
     });
   } catch (err) {
     fail(err);

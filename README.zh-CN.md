@@ -92,11 +92,10 @@ mi-note-cli create --title "带图" --content "看图：
 ## 数据目录
 
 - **登录态缓存**（macOS）：`~/Library/Caches/mi-note-cli/`（`cookie` + `browser-data/`，可被系统/用户当缓存清理，清了重新 login 即可）
-- **配置与同步状态**（持久，不被当缓存清理）：
-  - macOS: `~/Library/Application Support/mi-note-cli/config.json`
-  - Linux: `~/.config/mi-note-cli/config.json`
-  - Windows: `%APPDATA%\mi-note-cli\config.json`
-  - 单一文件，集中存放全局默认模式 + 各同步目录（以绝对路径为 key）的状态。
+- **配置与同步状态**：项目根目录下的 `.mi-note-cli.json`（CLI 在哪个目录执行，就在该目录读写）。
+  - 单一文件，存放同步模式 + 同步目录 + 各笔记的同步基线状态。
+  - 笔记路径以**相对项目根**的相对路径记录，配置可随项目一起提交、在多人/多设备间共享，团队同步策略（mode）保持一致。
+  - 若不希望把同步状态纳入版本控制，可将 `.mi-note-cli.json` 加入 `.gitignore`。
 
 ## 已知限制
 
