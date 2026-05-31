@@ -21,6 +21,14 @@ export async function updateCommand(
   opts: UpdateOptions,
 ): Promise<void> {
   try {
+    let colorOverride: number | undefined;
+    if (opts.color !== undefined) {
+      colorOverride = parseInt(opts.color, 10);
+      if (Number.isNaN(colorOverride)) {
+        throw new Error(`--color 必须是数字，收到：${opts.color}`);
+      }
+    }
+
     const client = await getClient();
     const current = await client.getNote(id);
 
@@ -35,7 +43,7 @@ export async function updateCommand(
       status: current.status,
       createDate: current.createDate ?? now,
       modifyDate: now,
-      colorId: opts.color ? parseInt(opts.color, 10) : current.colorId ?? 0,
+      colorId: colorOverride ?? current.colorId ?? 0,
       content: xmlContent,
       setting: current.setting ?? { themeId: 0, stickyTime: 0, version: 0 },
       folderId: opts.folder ?? String(current.folderId ?? "0"),

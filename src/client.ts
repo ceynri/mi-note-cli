@@ -423,7 +423,7 @@ export class MiNoteClient {
     if (!resp.ok) {
       throw new Error(`请求失败 ${resp.status} ${resp.statusText}`);
     }
-    return (await resp.json()) as T;
+    return (await parseJsonResponse(resp)) as T;
   }
 
   private async postForm<T>(
@@ -448,6 +448,20 @@ export class MiNoteClient {
       const text = await resp.text();
       throw new Error(`请求失败 ${resp.status}: ${text}`);
     }
-    return (await resp.json()) as T;
+    return (await parseJsonResponse(resp)) as T;
+  }
+}
+
+/**
+ * 解析响应体为 JSON。服务端降级 / 网关错误时可能返回 HTML 而非 JSON，
+ * 此时 resp.json() 会抛出晦涩的 SyntaxError，这里转成可读错误。
+ */
+async function parseJsonResponse(resp: Response): Promise<unknown> {
+  const text = await resp.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    const preview = text.slice(0, 120).replace(/\s+/g, " ").trim();
+    throw new Error(`服务端返回了非 JSON 响应（可能是登录态失效或服务异常）：${preview}`);
   }
 }

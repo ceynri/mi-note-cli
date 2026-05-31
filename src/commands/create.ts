@@ -22,12 +22,20 @@ export async function createCommand(opts: CreateOptions): Promise<void> {
       );
     }
 
+    let colorId = 0;
+    if (opts.color !== undefined) {
+      colorId = parseInt(opts.color, 10);
+      if (Number.isNaN(colorId)) {
+        throw new Error(`--color 必须是数字，收到：${opts.color}`);
+      }
+    }
+
     const client = await getClient();
     const now = Date.now();
     const xmlContent = markdownToXml(content);
 
     const entry: WriteNoteEntry = {
-      colorId: opts.color ? parseInt(opts.color, 10) : 0,
+      colorId,
       folderId: opts.folder ?? "0",
       createDate: now,
       modifyDate: now,
