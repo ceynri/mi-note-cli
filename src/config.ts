@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { resolve, join, dirname } from "node:path";
 import { getConfigDir, ensureDir, fileExists } from "./utils.js";
 import type { AppConfig, SyncDirState, SyncMode } from "./types.js";
 
@@ -32,7 +32,7 @@ export async function loadConfig(): Promise<AppConfig> {
 /** 写入公共配置 */
 export async function saveConfig(config: AppConfig): Promise<void> {
   const file = configFilePath();
-  await ensureDir(join(file, ".."));
+  await ensureDir(dirname(file));
   await writeFile(file, JSON.stringify(config, null, 2), "utf-8");
 }
 
