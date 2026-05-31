@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# 本地导出/同步产物
+output/
+.sync-state.json
+.mi-note-cli.json
+
+# 测试临时产物
+tmp-test-output/
+
+# 本地开发
+NOTES.dev.md

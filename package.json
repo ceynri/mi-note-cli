@@ -1,0 +1,44 @@
+{
+  "name": "mi-note-cli",
+  "version": "0.1.0",
+  "description": "A full-featured CLI for Xiaomi Cloud Notes (i.mi.com) — read, create, update, delete, move, pin notes, manage folders, upload images, and export to Markdown. Designed to be AI-friendly.",
+  "type": "module",
+  "bin": {
+    "mi-note-cli": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/cli.js",
+    "test": "node --import tsx/esm --test tests/*.test.ts",
+    "test:integration": "MI_NOTE_CLI_INTEGRATION=1 node --import tsx/esm --test tests/integration.test.ts"
+  },
+  "keywords": [
+    "xiaomi",
+    "mi",
+    "note",
+    "cloud-note",
+    "cli",
+    "markdown",
+    "export",
+    "ai"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.1.0",
+    "playwright": "^1.52.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "@types/node": "^20.0.0"
+  }
+}
