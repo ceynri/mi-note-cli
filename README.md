@@ -102,7 +102,7 @@ The tool auto-converts `minote://image/{fileId}` into Xiaomi's image markup.
 - **Trash listing / restore**: no public API; deleted notes can only be restored within 30 days via the [i.mi.com](https://i.mi.com) web UI.
 - **Private notes / dedicated to-do type / mind maps**: no stable write API; best-effort on export, no editing.
 - **User tags**: Xiaomi Notes has no user-tag system (the `tag` field is a sync version).
-- **Cookie lifetime**: sessions are short-lived; re-run `login` after expiry.
+- **Cookie lifetime**: when the short-lived `serviceToken` expires, the CLI silently refreshes it using the persisted long-lived session — usually no need to `login` again; you only need to re-run `login` once the long-lived session itself expires.
 
 ## Notes for AI Callers
 

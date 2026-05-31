@@ -1,4 +1,4 @@
-import { ensureAuth, peekAuth, clearAuthCache } from "../auth.js";
+import { ensureAuth, peekOrRefreshAuth, clearAuthCache } from "../auth.js";
 import { success, logInfo, fail } from "../output.js";
 
 /** login：强制走登录流程（浏览器或导入），刷新缓存 */
@@ -28,7 +28,7 @@ export async function logoutCommand(): Promise<void> {
 /** whoami：查看当前登录态 */
 export async function whoamiCommand(): Promise<void> {
   try {
-    const auth = await peekAuth();
+    const auth = await peekOrRefreshAuth();
     if (!auth) {
       success({ loggedIn: false }, () => {
         logInfo("未登录（运行 mi-note-cli login 登录）");

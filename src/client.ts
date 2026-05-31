@@ -23,13 +23,24 @@ import type {
 const API_BASE = "https://i.mi.com";
 
 /**
+ * 登录态失效时的续期回调：成功返回新的 AuthInfo，失败返回 null。
+ * 由上层注入（通常是静默重开持久化浏览器换发 serviceToken）。
+ */
+export type AuthRefresher = () => Promise<AuthInfo | null>;
+
+/**
  * 小米云笔记 API 客户端：封装全部读/写/上传/下载操作。
  *
  * 写操作统一为 POST + application/x-www-form-urlencoded，body 携带 serviceToken。
  * 更新/删除遵循乐观锁：先 GET 拿最新 tag，再提交。
+ *
+ * 登录态失效（401）时，若注入了 refresher，会静默续期并自动重试一次。
  */
 export class MiNoteClient {
-  constructor(private readonly auth: AuthInfo) {}
+  constructor(
+    private auth: AuthInfo,
+    private readonly refresher?: AuthRefresher,
+  ) {}
 
   private get cookie(): string {
     return this.auth.cookie;
@@ -265,10 +276,12 @@ export class MiNoteClient {
     const maxRetries = 2;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const resp = await fetch(url, {
-          headers: buildHeaders(this.cookie),
-          redirect: "follow",
-        });
+        const resp = await this.requestWithRetry(() =>
+          fetch(url, {
+            headers: buildHeaders(this.cookie),
+            redirect: "follow",
+          }),
+        );
         if (!resp.ok) {
           if (attempt < maxRetries) {
             await delay(500 * (attempt + 1));
@@ -280,7 +293,10 @@ export class MiNoteClient {
         await ensureFileDir(savePath);
         await writeFile(savePath, buffer);
         return true;
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("登录态已过期")) {
+          throw err;
+        }
         if (attempt < maxRetries) {
           await delay(500 * (attempt + 1));
           continue;
@@ -415,11 +431,33 @@ export class MiNoteClient {
 
   // ============ 底层请求 ============
 
-  private async getJson<T>(url: string): Promise<T> {
-    const resp = await fetch(url, { headers: buildHeaders(this.cookie) });
+  /**
+   * 执行一次带登录态的请求；遇 401 且有 refresher 时静默续期并重试一次。
+   * @param send 用当前 cookie 发请求，返回 Response
+   */
+  private async requestWithRetry(
+    send: () => Promise<Response>,
+  ): Promise<Response> {
+    let resp = await send();
+    if (resp.status === 401 && this.refresher) {
+      await discardResponseBody(resp);
+      const newAuth = await this.refresher();
+      if (newAuth) {
+        this.auth = newAuth;
+        resp = await send(); // 用新 cookie 重试一次
+      }
+    }
     if (resp.status === 401) {
+      await discardResponseBody(resp);
       throw new Error("登录态已过期，请重新登录（mi-note-cli login）");
     }
+    return resp;
+  }
+
+  private async getJson<T>(url: string): Promise<T> {
+    const resp = await this.requestWithRetry(() =>
+      fetch(url, { headers: buildHeaders(this.cookie) }),
+    );
     if (!resp.ok) {
       throw new Error(`请求失败 ${resp.status} ${resp.statusText}`);
     }
@@ -430,20 +468,23 @@ export class MiNoteClient {
     path: string,
     params: Record<string, string>,
   ): Promise<T> {
-    const body = Object.entries(params)
-      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-      .join("&");
-    const resp = await fetch(`${API_BASE}${path}`, {
-      method: "POST",
-      headers: {
-        ...buildHeaders(this.cookie),
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-      },
-      body,
-    });
-    if (resp.status === 401) {
-      throw new Error("登录态已过期，请重新登录（mi-note-cli login）");
-    }
+    const send = (): Promise<Response> => {
+      // serviceToken 随 cookie 续期一起更新，故每次发送时重新取值构造 body
+      const merged = { ...params };
+      if ("serviceToken" in merged) merged.serviceToken = this.auth.serviceToken;
+      const body = Object.entries(merged)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join("&");
+      return fetch(`${API_BASE}${path}`, {
+        method: "POST",
+        headers: {
+          ...buildHeaders(this.cookie),
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        },
+        body,
+      });
+    };
+    const resp = await this.requestWithRetry(send);
     if (!resp.ok) {
       const text = await resp.text();
       throw new Error(`请求失败 ${resp.status}: ${text}`);
@@ -463,5 +504,13 @@ async function parseJsonResponse(resp: Response): Promise<unknown> {
   } catch {
     const preview = text.slice(0, 120).replace(/\s+/g, " ").trim();
     throw new Error(`服务端返回了非 JSON 响应（可能是登录态失效或服务异常）：${preview}`);
+  }
+}
+
+async function discardResponseBody(resp: Response): Promise<void> {
+  try {
+    await resp.body?.cancel();
+  } catch {
+    // ignore cleanup errors
   }
 }

@@ -10,7 +10,11 @@ const NOTE_URL = "https://i.mi.com/note/h5#/";
 const NOTE_API_BASE = "https://i.mi.com/note/full/page/";
 const LOGIN_TIMEOUT = 300_000;
 const POLL_INTERVAL = 2_000;
+const REFRESH_TIMEOUT = 15_000;
+const VALIDATE_TIMEOUT = 10_000;
 const CHROME_VERSION = "131";
+
+let refreshInFlight: Promise<AuthInfo | null> | null = null;
 
 /**
  * 确保拥有有效的认证信息（cookie + serviceToken + userId）。
@@ -18,14 +22,13 @@ const CHROME_VERSION = "131";
  * 解析顺序：
  * 1. forceLogin=true → 直接浏览器登录。
  * 2. 缓存 cookie 有效 → 使用。
- * 3. 否则 → 浏览器登录。
+ * 3. 缓存失效但长效登录态可续期 → 静默续期。
+ * 4. 否则 → 浏览器登录。
  */
 export async function ensureAuth(forceLogin = false): Promise<AuthInfo> {
   if (!forceLogin) {
-    const cached = await loadCachedCookie(COOKIE_FILE);
-    if (cached && (await validateCookie(cached))) {
-      return buildAuthInfo(cached);
-    }
+    const auth = await peekOrRefreshAuth();
+    if (auth) return auth;
   }
 
   const cookie = await loginAndGetCookie();
@@ -35,7 +38,7 @@ export async function ensureAuth(forceLogin = false): Promise<AuthInfo> {
 
 /**
  * 仅读取当前缓存的认证信息，不触发登录。无有效缓存时返回 null。
- * 用于 whoami 等只查询不登录的场景。
+ * 用于只检查当前 cookie 是否有效的场景。
  */
 export async function peekAuth(): Promise<AuthInfo | null> {
   const cached = await loadCachedCookie(COOKIE_FILE);
@@ -45,6 +48,11 @@ export async function peekAuth(): Promise<AuthInfo | null> {
   return null;
 }
 
+/** 先读有效缓存，失效时再静默续期；不触发交互式登录。 */
+export async function peekOrRefreshAuth(): Promise<AuthInfo | null> {
+  return (await peekAuth()) ?? (await refreshAuth());
+}
+
 /** 清除自身缓存（cookie + 浏览器数据） */
 export async function clearAuthCache(): Promise<string> {
   const dir = getCacheDir();
@@ -52,6 +60,27 @@ export async function clearAuthCache(): Promise<string> {
     await rm(dir, { recursive: true, force: true });
   }
   return dir;
+}
+
+/**
+ * 静默续期并落盘，返回新的 AuthInfo；长效登录态已失效时返回 null。
+ * 供 client 在请求遇 401 时作为续期回调调用。
+ */
+export async function refreshAuth(): Promise<AuthInfo | null> {
+  refreshInFlight ??= doRefreshAuth().finally(() => {
+    refreshInFlight = null;
+  });
+  return await refreshInFlight;
+}
+
+async function doRefreshAuth(): Promise<AuthInfo | null> {
+  const cookie = await silentRefreshCookie();
+  if (!cookie) {
+    // 其他进程可能刚刚完成续期并落盘；失败前再读一次缓存。
+    return await peekAuth();
+  }
+  await saveCookie(cookie);
+  return buildAuthInfo(cookie);
 }
 
 /** 从 cookie 字符串构造 AuthInfo（提取 serviceToken / userId） */
@@ -80,34 +109,78 @@ export function extractCookieValue(
 }
 
 /**
- * 通过 Playwright 打开浏览器让用户登录，获取 Cookie。
+ * 用持久化上下文启动浏览器。
  * 浏览器策略：优先系统 Chrome（真签名），回退 Playwright Chromium。
+ * @param headless 是否无头（静默续期用 true，交互登录用 false）
  */
-async function loginAndGetCookie(): Promise<string> {
-  console.error("🌐 正在打开浏览器，请在浏览器中登录小米账号...");
-
+async function launchPersistentBrowser(headless: boolean): Promise<
+  import("playwright").BrowserContext
+> {
   const { chromium } = await import("playwright");
   // 启用沙箱并移除 Playwright 默认追加的 --no-sandbox，
   // 避免浏览器顶部出现「您使用的是不受支持的命令行标记 --no-sandbox」警告条。
   const launchOptions = {
-    headless: false,
+    headless,
     chromiumSandbox: true,
     ignoreDefaultArgs: ["--no-sandbox", "--enable-automation"],
   };
-
-  let context;
   try {
-    context = await chromium.launchPersistentContext(BROWSER_DATA_DIR, {
+    return await chromium.launchPersistentContext(BROWSER_DATA_DIR, {
       ...launchOptions,
       channel: "chrome",
     });
   } catch {
-    console.error("⚠️ 未检测到系统 Chrome，回退到 Playwright 自带 Chromium");
-    context = await chromium.launchPersistentContext(BROWSER_DATA_DIR, {
+    if (!headless) {
+      console.error("⚠️ 未检测到系统 Chrome，回退到 Playwright 自带 Chromium");
+    }
+    return await chromium.launchPersistentContext(BROWSER_DATA_DIR, {
       ...launchOptions,
       channel: "chromium",
     });
   }
+}
+
+/**
+ * 静默续期：复用持久化的浏览器数据目录，无头打开 i.mi.com，
+ * 让浏览器用 account 域的长效 passToken 自动换发新的 i.mi.com serviceToken，
+ * 提取并返回新 cookie。全程无需用户交互。
+ *
+ * 仅当 browser-data 里的长效登录态仍有效时成功；失效则返回 null，
+ * 由调用方回退到交互式 login。
+ */
+export async function silentRefreshCookie(): Promise<string | null> {
+  if (!(await fileExists(BROWSER_DATA_DIR))) return null;
+  let context: import("playwright").BrowserContext | undefined;
+  try {
+    context = await launchPersistentBrowser(true);
+    const page = context.pages()[0] || (await context.newPage());
+    const deadline = Date.now() + REFRESH_TIMEOUT;
+    await page.goto(NOTE_URL, {
+      waitUntil: "load",
+      timeout: REFRESH_TIMEOUT,
+    }).catch(() => undefined);
+
+    while (true) {
+      const cookieStr = await extractCookies(context);
+      if (cookieStr && (await validateCookie(cookieStr))) return cookieStr;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return null;
+      await new Promise((r) => setTimeout(r, Math.min(POLL_INTERVAL, remaining)));
+    }
+  } catch {
+    return null;
+  } finally {
+    await context?.close();
+  }
+}
+
+/**
+ * 通过 Playwright 打开浏览器让用户登录，获取 Cookie。
+ */
+async function loginAndGetCookie(): Promise<string> {
+  console.error("🌐 正在打开浏览器，请在浏览器中登录小米账号...");
+
+  const context = await launchPersistentBrowser(false);
 
   const page = context.pages()[0] || (await context.newPage());
   await page.goto(NOTE_URL);
@@ -165,7 +238,10 @@ async function extractCookies(context: {
 export async function validateCookie(cookie: string): Promise<boolean> {
   try {
     const url = `${NOTE_API_BASE}?ts=${Date.now()}&limit=1`;
-    const resp = await fetch(url, { headers: buildHeaders(cookie) });
+    const resp = await fetch(url, {
+      headers: buildHeaders(cookie),
+      signal: AbortSignal.timeout(VALIDATE_TIMEOUT),
+    });
     if (!resp.ok) return false;
     const data = (await resp.json()) as { result: string };
     return data.result === "ok";

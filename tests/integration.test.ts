@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { peekAuth } from "../src/auth.ts";
+import { peekOrRefreshAuth, refreshAuth } from "../src/auth.ts";
 import { MiNoteClient } from "../src/client.ts";
 import { exportNotes } from "../src/sync.ts";
 import {
@@ -32,12 +32,13 @@ let authError: string | null = null;
 
 before(async () => {
   if (!ENABLED) return;
-  const auth = await peekAuth();
+  // 与 getClient 一致：现有登录态失效时先尝试静默续期，仍失败才要求 login
+  const auth = await peekOrRefreshAuth();
   if (!auth) {
     authError = "无有效登录态（cookie 已过期）。请先运行 mi-note-cli login";
     return;
   }
-  client = new MiNoteClient(auth);
+  client = new MiNoteClient(auth, refreshAuth);
 });
 
 function skipIfUnavailable(t: { skip: (msg?: string) => void }): boolean {
