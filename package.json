@@ -18,8 +18,17 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/cli.js",
+    "prepublishOnly": "npm run build",
     "test": "node --import tsx/esm --test tests/*.test.ts",
     "test:integration": "MI_NOTE_CLI_INTEGRATION=1 node --import tsx/esm --test tests/integration.test.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ceynri/mi-note-cli.git"
+  },
+  "homepage": "https://github.com/ceynri/mi-note-cli#readme",
+  "bugs": {
+    "url": "https://github.com/ceynri/mi-note-cli/issues"
   },
   "keywords": [
     "xiaomi",
