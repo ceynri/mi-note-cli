@@ -9,7 +9,7 @@
   "files": [
     "dist",
     "README.md",
-    "README.zh-CN.md"
+    "README.en.md"
   ],
   "engines": {
     "node": ">=18.0.0"

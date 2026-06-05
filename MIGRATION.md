@@ -1,54 +1,54 @@
-English | [简体中文](./MIGRATION.zh-CN.md)
+[English](./MIGRATION.en.md) | 简体中文
 
-# Migrating from mi-note-export to mi-note-cli
+# 从 mi-note-export 迁移到 mi-note-cli
 
-`mi-note-cli` is a full-featured, independent CLI for Xiaomi Cloud Notes. If you previously used `mi-note-export` (export-only), this guide helps you switch.
+`mi-note-cli` 是一个功能完整、独立的小米云笔记命令行工具。如果你之前用的是只能导出的 `mi-note-export`，本文帮你迁移。
 
-> mi-note-cli is a standalone tool. It does **not** depend on, read, or modify mi-note-export in any way. This document is the only place that mentions the old tool.
+> mi-note-cli 是独立工具，**不依赖、不读取、不修改** mi-note-export 的任何内容。仅本文档提及旧工具。
 
-## What's different
+## 主要差异
 
 | | mi-note-export | mi-note-cli |
 |---|---|---|
-| Scope | Export only (cloud → local) | Full read/write + folders + image upload + export + **two-way sync** |
-| Commands | single command | `login` / `list` / `get` / `search` / `create` / `update` / `delete` / `move` / `pin` / `folders` / `upload-image` / `export` / `sync` |
-| AI-friendly | — | global `--json`, fail-fast in non-interactive contexts |
-| Local↔cloud | one-way snapshot | `export` (one-way) + `sync` (bidirectional with conflict modes) |
+| 范围 | 仅导出（云→本地） | 完整读写 + 文件夹 + 图片上传 + 导出 + **双向同步** |
+| 命令 | 单命令 | `login`/`list`/`get`/`search`/`create`/`update`/`delete`/`move`/`pin`/`folders`/`upload-image`/`export`/`sync` |
+| AI 友好 | — | 全局 `--json`，非交互环境快速失败 |
+| 本地↔云端 | 单向快照 | `export`（单向）+ `sync`（双向，含冲突模式） |
 
-## Command mapping
+## 命令对照
 
 | mi-note-export | mi-note-cli |
 |---|---|
-| `mi-note` (incremental export) | `mi-note-cli export -o <dir>` |
-| `mi-note --force` | `mi-note-cli export -o <dir> --force` |
+| `mi-note`（增量导出） | `mi-note-cli export -o <目录>` |
+| `mi-note --force` | `mi-note-cli export -o <目录> --force` |
 | `mi-note --delete-id <id>` | `mi-note-cli delete <id>` |
 | `mi-note --login` | `mi-note-cli login` |
 | `mi-note --clear-cache` | `mi-note-cli logout` |
 
-New capabilities with no old equivalent: `sync` (two-way), `create`, `update`, `move`, `pin`, folder management, `upload-image`, `search`.
+旧工具没有的新能力：`sync`（双向）、`create`、`update`、`move`、`pin`、文件夹管理、`upload-image`、`search`。
 
-## Login
+## 登录
 
-Sessions are **not** carried over. Run `mi-note-cli login` once to authenticate (opens a browser). mi-note-cli keeps its own cookie cache, fully separate from the old tool.
+登录态**不会**沿用。运行一次 `mi-note-cli login` 完成认证（打开浏览器）。mi-note-cli 维护自己独立的 cookie 缓存，与旧工具完全隔离。
 
-## Configuration & state
+## 配置与状态
 
-- Old: `.mi-note-export.json` in the working dir + `.sync-state.json` inside the output dir.
-- New: a single `.mi-note-cli.json` at the project root, holding the sync mode + sync directory + per-note sync baseline state. Note paths are stored relative to the project root, so the config can be committed with the project and shared across devices/people.
+- 旧：工作目录的 `.mi-note-export.json` + 输出目录内的 `.sync-state.json`。
+- 新：项目根目录下的单一 `.mi-note-cli.json`，存放同步模式 + 同步目录 + 各笔记的同步基线状态。笔记路径以相对项目根的相对路径记录，配置可随项目提交、跨设备/多人共享。
 
-There is no automatic import of the old config. To replicate your old setup:
+不会自动导入旧配置。复刻旧设置：
 
 ```bash
-# Old: { "output": "./my-notes" }
-# New: just pass -o, or set a default sync mode via init
-mi-note-cli export -o ./my-notes      # one-way, same as before
-mi-note-cli sync init                  # optional: set a default sync mode
+# 旧: { "output": "./my-notes" }
+# 新: 直接传 -o，或用 init 设默认同步模式
+mi-note-cli export -o ./my-notes      # 单向，行为同旧工具
+mi-note-cli sync init                  # 可选：设默认同步模式
 ```
 
-## Recommended path
+## 推荐路径
 
 1. `mi-note-cli login`
-2. If you only want backups (old behavior): `mi-note-cli export -o ./my-notes`
-3. If you want local edits to flow back to cloud: `mi-note-cli sync -o ./my-notes --mode two-way`
+2. 只想备份（旧行为）：`mi-note-cli export -o ./my-notes`
+3. 想让本地修改回流云端：`mi-note-cli sync -o ./my-notes --mode two-way`
 
-Your old `mi-note-export` install and its data remain untouched; you can keep or remove it independently.
+你的 `mi-note-export` 安装与数据原样保留，可独立保留或删除。

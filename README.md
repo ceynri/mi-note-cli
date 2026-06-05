@@ -1,121 +1,142 @@
-English | [简体中文](./README.zh-CN.md)
+[English](./README.en.md) | 简体中文
 
 # mi-note-cli
 
-A full-featured CLI for Xiaomi Cloud Notes (i.mi.com) — read, create, update, delete, move, and pin notes, manage folders, upload images, export, and **two-way sync**. **Designed for AI / scripting** (unified `--json` output, fail-fast in non-interactive mode).
+小米云笔记（i.mi.com）的全功能命令行工具——读取、创建、更新、删除、移动、置顶笔记，管理文件夹，上传图片，导出与**双向同步**。**专为 AI / 脚本调用设计**（统一 `--json` 输出、非交互模式快速失败）。
 
-> Migrating from the old mi-note-export? See [MIGRATION.md](./MIGRATION.md).
+> 从旧的 mi-note-export 迁移？见 [MIGRATION.md](./MIGRATION.md)。
 
-## Features
+## 功能
 
-- **Auth**: interactive browser login with cookie caching
-- **Read**: list notes, view a note (as Markdown), keyword search, list folders
-- **Write**: create / update / delete / move / pin notes
-- **Folders**: create / rename / delete
-- **Images**: upload a local image, get an embeddable reference
-- **Export `export`**: one-way cloud → local Markdown (attachments, folder layout), never touches the cloud
-- **Sync `sync`**: bidirectional local↔cloud with 3-way diff and conflict modes
-- **AI-friendly**: global `--json`; never pops a browser in non-interactive contexts — fails fast instead
+- **认证**：浏览器交互式登录，Cookie 缓存
+- **读**：列出笔记、查看单条笔记（转 Markdown）、关键词搜索、列出文件夹
+- **写**：创建 / 更新 / 删除 / 移动 / 置顶笔记
+- **文件夹**：创建 / 重命名 / 删除
+- **图片**：上传本地图片，返回可嵌入笔记的引用
+- **导出 `export`**：单向云→本地，把笔记导出为 Markdown（含附件、按文件夹组织），永不修改云端
+- **同步 `sync`**：本地与云端双向同步，3-way 差异检测 + 多种冲突模式
+- **AI 友好**：全局 `--json` 输出结构化结果；非交互环境下不弹浏览器、直接报错
 
-## Install
+## 安装
 
-```bash
-pnpm install
-pnpm build
-node dist/cli.js --help
-# or link globally: npm link → use `mi-note-cli`
-```
-
-> Playwright is only used to open a browser at login time, preferring system Chrome.
-
-## Quick Start
+### 作为 CLI 工具
 
 ```bash
-mi-note-cli login                       # 1. Log in (opens a browser)
-mi-note-cli list --limit 20             # 2. List notes
-mi-note-cli get <noteId>                # 3. View a note
-mi-note-cli create --title "Title" --content "# Body"   # 4. Create
-mi-note-cli sync -o ./notes --mode two-way              # 5. Two-way sync with a local dir
+npm install -g mi-note-cli
 ```
 
-## Commands
+> 环境要求：Node.js >= 18。Playwright 仅用于登录时打开浏览器，优先使用系统已安装的 Chrome。
 
-| Command | Description |
+### 作为 AI Skill
+
+通过 [`npx skills`](https://github.com/agentc-app/skills) 安装内置 skill，让 AI Agent 了解此工具的用法：
+
+```bash
+npx -y skills add ceynri/mi-note-cli --all
+```
+
+或自选安装到哪些 agent：
+
+```bash
+npx skills add ceynri/mi-note-cli
+```
+
+## 快速开始
+
+```bash
+mi-note-cli login                       # 1. 登录（打开浏览器）
+mi-note-cli list --limit 20             # 2. 列出笔记
+mi-note-cli get <笔记ID>                 # 3. 查看某条笔记
+mi-note-cli create --title "标题" --content "# 正文"   # 4. 创建
+mi-note-cli sync -o ./notes --mode two-way            # 5. 与本地双向同步
+```
+
+## 命令一览
+
+| 命令 | 说明 |
 |---|---|
-| `login` / `logout` / `whoami` | Log in / clear session / show status |
-| `list [--folder <id>] [--limit <n>]` | List notes |
-| `get <id> [--raw]` | View a note (Markdown by default, `--raw` for XML) |
-| `search <keyword> [--limit <n>]` | Search titles and snippets |
-| `create [--title] [--folder] [--content/--file]` | Create a note (content can come from stdin) |
-| `update <id> [--title] [--folder] [--content/--file]` | Update a note |
-| `delete <id> [--purge] [-y]` | Delete (trash by default, `--purge` permanent) |
-| `move <id> <folderId>` | Move a note to a folder |
-| `pin <id>` / `unpin <id>` | Pin / unpin |
-| `folders` / `folder create\|rename\|delete` | Folder management |
-| `upload-image <path>` | Upload an image, returns `minote://image/{fileId}` |
-| `export [-o <dir>] [-f]` | One-way export to Markdown |
-| `sync [-o <dir>] [--mode M] [--dry-run] [-y]` | Bidirectional sync |
-| `sync init` / `sync status` | Set default mode / show config |
+| `login` / `logout` / `whoami` | 登录 / 清除登录态 / 查看状态 |
+| `list [--folder <id>] [--limit <n>]` | 列出笔记 |
+| `get <id> [--raw]` | 查看笔记（默认转 Markdown，`--raw` 出原始 XML） |
+| `search <keyword> [--limit <n>]` | 搜索标题与摘要 |
+| `create [--title] [--folder] [--content/--file]` | 创建笔记（也可从 stdin 读内容） |
+| `update <id> [--title] [--folder] [--content/--file]` | 更新笔记 |
+| `delete <id> [--purge] [-y]` | 删除（默认回收站，`--purge` 永久） |
+| `move <id> <folderId>` | 移动笔记到文件夹 |
+| `pin <id>` / `unpin <id>` | 置顶 / 取消置顶 |
+| `folders` / `folder create\|rename\|delete` | 文件夹管理 |
+| `upload-image <path>` | 上传图片，返回 `minote://image/{fileId}` 引用 |
+| `export [-o <dir>] [-f]` | 单向导出为 Markdown |
+| `sync [-o <dir>] [--mode M] [--dry-run] [-y]` | 双向同步 |
+| `sync init` / `sync status` | 引导设置默认模式 / 查看配置 |
 
-All commands support the global `--json` flag, producing `{ ok, data }` / `{ ok: false, error }`.
+所有命令均支持全局 `--json`，输出 `{ ok, data }` / `{ ok: false, error }`。
 
-## Export vs Sync
+## 导出 vs 同步
 
-- **`export`**: one-way cloud → local snapshot, **never modifies the cloud**. For "I just want backups". Local edits are not pushed back.
-- **`sync`**: bidirectional, based on a 3-way comparison (last-sync base / current remote / current local), resolving diffs and conflicts per mode.
+- **`export`**：单向云→本地快照，**永不修改云端**。适合"我只想备份"。本地改了不会回写。
+- **`sync`**：本地与云端双向，基于「上次同步基线 / 云端现状 / 本地现状」三方对比，按模式处理差异与冲突。
 
-### Sync modes (`--mode`)
+### 同步模式（`--mode`）
 
-| Mode | Behavior |
+| 模式 | 行为 |
 |---|---|
-| `download` | Cloud wins: cloud overwrites local; local changes never uploaded |
-| `mirror` | Local mirror: download only; local changes detected but not uploaded |
-| `upload` | Local wins: everything uploaded to cloud |
-| `two-way` | Auto bidirectional: one-sided changes sync automatically; only real conflicts pause |
-| `manual` (default) | Interactive: every divergence is listed and asked one by one |
+| `download` | 云端优先：一切以云端为准，覆盖本地，不上行本地变更 |
+| `mirror` | 本地镜像：云→本地下行，本地变更只检测不上行 |
+| `upload` | 本地优先：一切以本地为准上行到云端 |
+| `two-way` | 双向自动：单边改自动同步，真冲突才停下询问 |
+| `manual`（默认） | 交互：任何不一致都列出并逐条询问 |
 
-Conflicts (both-changed / one-side-deleted-other-changed): `download/mirror/upload` resolve automatically by their declared winner; `two-way/manual` ask interactively, or in non-interactive contexts skip and report — **never deleting data on their own**.
+冲突（双改 / 一端删另一端改）处理：`download/mirror/upload` 已声明优先方，自动解决；`two-way/manual` 交互询问，非交互环境跳过并报告，**绝不擅自删数据**。
 
-Use `sync init` to set a default mode interactively; then `sync` can omit `--mode`. `sync --dry-run` previews without executing.
+用 `sync init` 交互设置默认模式，之后 `sync` 可省略 `--mode`。`sync --dry-run` 只预览不执行。
 
-## Embedding Images
+## 在笔记中插入图片
 
 ```bash
 mi-note-cli upload-image ./photo.png    # → ![图片](minote://image/xxxxxx)
-mi-note-cli create --title "With image" --content "See:
+mi-note-cli create --title "带图" --content "看图：
 
 ![图片](minote://image/xxxxxx)"
 ```
 
-The tool auto-converts `minote://image/{fileId}` into Xiaomi's image markup.
+工具会自动把 `minote://image/{fileId}` 转换为小米笔记的图片标记。
 
-## Data Directories
+## 数据目录
 
-- **Session cache** (macOS): `~/Library/Caches/mi-note-cli/` (`cookie` + `browser-data/`; may be cleared by the system/user as cache — just log in again).
-- **Config & sync state**: `.mi-note-cli.json` at the project root (read/written in whatever directory you run the CLI from).
-  - A single file holding the sync mode + sync directory + per-note sync baseline state.
-  - Note paths are stored **relative to the project root**, so the config can be committed alongside the project and shared across people/devices, keeping the team's sync mode consistent.
-  - If you'd rather not version-control the sync state, add `.mi-note-cli.json` to your `.gitignore`.
+- **登录态缓存**（macOS）：`~/Library/Caches/mi-note-cli/`（`cookie` + `browser-data/`，可被系统/用户当缓存清理，清了重新 login 即可）
+- **配置与同步状态**：项目根目录下的 `.mi-note-cli.json`（CLI 在哪个目录执行，就在该目录读写）。
+  - 单一文件，存放同步模式 + 同步目录 + 各笔记的同步基线状态。
+  - 笔记路径以**相对项目根**的相对路径记录，配置可随项目一起提交、在多人/多设备间共享，团队同步策略（mode）保持一致。
+  - 若不希望把同步状态纳入版本控制，可将 `.mi-note-cli.json` 加入 `.gitignore`。
 
-## Known Limitations
+## 已知限制
 
-- **Trash listing / restore**: no public API; deleted notes can only be restored within 30 days via the [i.mi.com](https://i.mi.com) web UI.
-- **Private notes / dedicated to-do type / mind maps**: no stable write API; best-effort on export, no editing.
-- **User tags**: Xiaomi Notes has no user-tag system (the `tag` field is a sync version).
-- **Cookie lifetime**: when the short-lived `serviceToken` expires, the CLI silently refreshes it using the persisted long-lived session — usually no need to `login` again; you only need to re-run `login` once the long-lived session itself expires.
+- **回收站列表/恢复**：小米无公开接口，删除后只能在 [i.mi.com](https://i.mi.com) 网页端 30 天内恢复。
+- **私密笔记 / 待办独立类型 / 思维导图**：无稳定写接口，导出尽力转换，不支持编辑。
+- **用户标签**：小米笔记无用户标签体系（API 的 `tag` 是同步版本号）。
+- **Cookie 时效**：短效 `serviceToken` 过期时会自动用本地持久化的长效登录态静默续期，通常无需重新 `login`；仅当长效登录态也失效时才需重新 `login`。
 
-## Notes for AI Callers
+---
 
-1. Always pass `--json` for parseable output.
-2. In non-interactive contexts (no TTY), an unauthenticated call fails immediately instead of hanging on browser login — have a human run `login` once first.
-3. For destructive actions pass `-y`; in non-interactive sync, real conflicts are skipped without touching data.
+## AI 调用建议
 
-## Development
+1. 始终加 `--json`，输出可直接解析。
+2. 非交互环境（无 TTY）未登录会立即返回错误而非卡浏览器登录，请先人工 `login` 一次。
+3. 删除等危险操作显式加 `-y`；sync 在非交互下真冲突会跳过不动数据。
+
+---
+
+## 开发
 
 ```bash
-pnpm build              # compile
-pnpm test               # unit tests (no network)
-pnpm test:integration   # real-API integration tests (needs login; writes self-clean)
+git clone https://github.com/ceynri/mi-note-cli.git
+cd mi-note-cli
+pnpm install
+pnpm build              # 编译
+pnpm dev                # 监听模式编译
+pnpm test               # 单元测试（无需网络）
+pnpm test:integration   # 真实 API 集成测试（需登录，写操作自清理）
 ```
 
 ## License
