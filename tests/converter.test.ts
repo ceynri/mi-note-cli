@@ -39,8 +39,17 @@ test("xmlToMarkdown: 标题", () => {
 test("xmlToMarkdown: 无序/有序列表", () => {
   const xml = `<bullet indent="1">项一</bullet>\n<bullet indent="1">项二</bullet>`;
   assert.equal(xmlToMarkdown(xml), "- 项一\n- 项二");
-  const ordered = `<order indent="1">第一</order>\n<order indent="1">第二</order>`;
-  assert.equal(xmlToMarkdown(ordered), "1. 第一\n1. 第二");
+  // 小米客户端原生 order 形态带 inputNumber，按显式数字解析回 markdown
+  const ordered =
+    `<order indent="1" inputNumber="1" />第一\n<order indent="1" inputNumber="2" />第二`;
+  assert.equal(xmlToMarkdown(ordered), "1. 第一\n2. 第二");
+});
+
+test("xmlToMarkdown: 自闭合 order/bullet（小米客户端真实形态）", () => {
+  // 含 inputNumber 时按显式数字渲染；缺省时回退为 1（向后兼容）
+  const xml =
+    `<order indent="1" inputNumber="2" />显式二\n<order indent="1" />缺省一\n<bullet indent="1" />无序项`;
+  assert.equal(xmlToMarkdown(xml), "2. 显式二\n1. 缺省一\n- 无序项");
 });
 
 test("xmlToMarkdown: 复选框", () => {
@@ -81,6 +90,11 @@ test("markdownToXml: 标题", () => {
 
 test("markdownToXml: 列表与复选框", () => {
   assert.equal(markdownToXml("- 项目"), '<bullet indent="1" />项目');
+  // 有序列表带显式 inputNumber，按用户写的数字渲染（避免被小米客户端按相邻自增重置）
+  assert.equal(
+    markdownToXml("1. 项目"),
+    '<order indent="1" inputNumber="1" />项目',
+  );
   assert.equal(
     markdownToXml("- [x] 完成"),
     '<input type="checkbox" checked="true" />完成',
@@ -89,6 +103,66 @@ test("markdownToXml: 列表与复选框", () => {
     markdownToXml("- [ ] 待办"),
     '<input type="checkbox" checked="false" />待办',
   );
+});
+
+test("markdownToXml: 有序列表保留用户原数字（回归 #order-renumber）", () => {
+  // 小米 <order> 在没有 inputNumber 时按相邻自增计数，被 <text> 段落打断会重置回 1。
+  // 必须给每项显式标 inputNumber，让客户端按指定数字渲染。
+  const md = "1. 第一项\n2. 第二项\n3. 第三项";
+  assert.equal(
+    markdownToXml(md),
+    '<order indent="1" inputNumber="1" />第一项\n<order indent="1" inputNumber="2" />第二项\n<order indent="1" inputNumber="3" />第三项',
+  );
+});
+
+test("markdownToXml: 被段落打断的有序项 inputNumber 也保留原数字", () => {
+  // 用户写 `1. ... <段落> ... 2. ...` 中间被打断，2. 必须仍渲染为 2.
+  const md = "1. 标题甲\n\n说明甲\n\n2. 标题乙\n\n说明乙";
+  const xml = markdownToXml(md);
+  assert.ok(xml.includes('<order indent="1" inputNumber="1" />标题甲'));
+  assert.ok(xml.includes('<order indent="1" inputNumber="2" />标题乙'));
+});
+
+test("markdownToXml: 多级有序/无序列表（按缩进推算 indent）", () => {
+  // 约定：每 2 空格 / 1 tab 为一级缩进，不再封顶到 2 级。
+  const md = [
+    "1. 一级",
+    "  1. 二级 a",
+    "  2. 二级 b",
+    "    1. 三级",
+    "      1. 四级",
+    "- 无序一级",
+    "  - 无序二级",
+    "    - 无序三级",
+  ].join("\n");
+  const xml = markdownToXml(md);
+  assert.ok(xml.includes('<order indent="1" inputNumber="1" />一级'));
+  assert.ok(xml.includes('<order indent="2" inputNumber="1" />二级 a'));
+  assert.ok(xml.includes('<order indent="2" inputNumber="2" />二级 b'));
+  assert.ok(xml.includes('<order indent="3" inputNumber="1" />三级'));
+  assert.ok(xml.includes('<order indent="4" inputNumber="1" />四级'));
+  assert.ok(xml.includes('<bullet indent="1" />无序一级'));
+  assert.ok(xml.includes('<bullet indent="2" />无序二级'));
+  assert.ok(xml.includes('<bullet indent="3" />无序三级'));
+});
+
+test("xmlToMarkdown: 多级列表反向解析（小米客户端真实形态）", () => {
+  // 复刻小米客户端写出的多级 order 形态
+  const xml = [
+    '<order indent="1" inputNumber="1" />一级 A',
+    '<order indent="2" inputNumber="0" />二级 a',
+    '<order indent="2" inputNumber="0" />二级 b',
+    '<order indent="3" inputNumber="0" />三级',
+    '<order indent="1" inputNumber="0" />一级 B',
+  ].join("\n");
+  // inputNumber=0 时回退为 1（客户端自身按相邻规则计数；导出时只能取静态值）
+  // 缩进按 2 空格/级
+  const md = xmlToMarkdown(xml);
+  assert.ok(md.includes("1. 一级 A"));
+  assert.ok(md.includes("  1. 二级 a"));
+  assert.ok(md.includes("  1. 二级 b"));
+  assert.ok(md.includes("    1. 三级"));
+  assert.ok(md.includes("1. 一级 B"));
 });
 
 test("markdownToXml: 引用与分割线", () => {

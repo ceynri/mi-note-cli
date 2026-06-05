@@ -215,10 +215,16 @@ function parseLine(line: string): ParsedLine | null {
     return { type: "checkbox", text: `${spaces}- [${checked ? "x" : " "}] ${txt}` };
   }
 
-  const orderMatch = line.match(
-    /^<order(?:\s+indent="(\d+)")?\s*>([\s\S]*?)<\/order>$/,
+  // order：小米客户端原生形态 `<order indent="N" inputNumber="X" />文本`
+  // inputNumber 显式指定渲染序号；缺省或 0 表示按相邻规则自增计数（导出时回退为 1）。
+  const orderSelfMatch = line.match(
+    /^<order\s+indent="(\d+)"(?:\s+inputNumber="(\d+)")?\s*\/>(.*)$/,
   );
-  if (orderMatch) return formatListItem("order", "1.", orderMatch[1], orderMatch[2]);
+  if (orderSelfMatch) {
+    const numberRaw = orderSelfMatch[2];
+    const number = !numberRaw || numberRaw === "0" ? "1" : numberRaw;
+    return formatListItem("order", `${number}.`, orderSelfMatch[1], orderSelfMatch[3]);
+  }
 
   const bulletMatch = line.match(
     /^<bullet(?:\s+indent="(\d+)")?\s*>([\s\S]*?)<\/bullet>$/,
@@ -415,10 +421,16 @@ export function markdownToXml(
     }
 
     // 有序列表
-    const order = line.match(/^(\s*)\d+\.\s+(.*)$/);
+    // 小米客户端原生形态：`<order indent="N" inputNumber="X" />文本`
+    // - 必须自闭合 + 后置文本（与 bullet 一致；闭合包裹形式 `<order>...</order>` 会被吞内容）
+    // - 必须显式带 inputNumber，按用户写的数字渲染；否则被 <text> 段落打断后，相邻自增计数会重置
+    const order = line.match(/^(\s*)(\d+)\.\s+(.*)$/);
     if (order) {
       const indent = computeIndent(order[1]);
-      out.push(`<order indent="${indent}">${inlineMdToXml(order[2])}</order>`);
+      const number = order[2];
+      out.push(
+        `<order indent="${indent}" inputNumber="${number}" />${inlineMdToXml(order[3])}`,
+      );
       continue;
     }
 
@@ -448,11 +460,11 @@ function inlineMdToXml(text: string): string {
 
 function computeIndent(leading: string): number {
   if (!leading) return 1;
-  // 每 2 空格或 1 tab 视为一级缩进，最多支持到 2 级
+  // 每 2 空格或 1 tab 视为一级缩进。小米客户端对 indent 不封顶，可以表达任意深度多级列表。
   const tabs = (leading.match(/\t/g) || []).length;
   const spaces = (leading.match(/ /g) || []).length;
   const level = tabs + Math.floor(spaces / 2);
-  return Math.min(2, 1 + level);
+  return 1 + level;
 }
 
 function resolveImageFileId(
