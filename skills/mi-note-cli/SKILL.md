@@ -15,51 +15,51 @@ description: 小米云笔记（i.mi.com）的全功能命令行工具，可读�
 
 ## 使用
 
-构建后通过 `node dist/cli.js <command>` 或全局 `mi-note-cli <command>` 调用。
+通过 `npx` 直接执行，无需提前全局安装：
 
 ### 读
 
 ```bash
-mi-note-cli list --json [--folder <id>] [--limit <n>]   # 列出笔记
-mi-note-cli get <id> --json                              # 查看笔记（转 Markdown）
-mi-note-cli get <id> --raw                               # 查看原始 XML
-mi-note-cli search <关键词> --json [--limit <n>]          # 搜索
-mi-note-cli folders --json                               # 列出文件夹
+npx mi-note-cli list --json [--folder <id>] [--limit <n>]   # 列出笔记
+npx mi-note-cli get <id> --json                              # 查看笔记（转 Markdown）
+npx mi-note-cli get <id> --raw                               # 查看原始 XML
+npx mi-note-cli search <关键词> --json [--limit <n>]          # 搜索
+npx mi-note-cli folders --json                               # 列出文件夹
 ```
 
 ### 写
 
 ```bash
 # 创建：内容可来自 --content、--file 或 stdin
-mi-note-cli create --title "标题" --content "# 正文" --json
-echo "正文" | mi-note-cli create --title "标题" --json
-mi-note-cli create --file ./note.md --folder <folderId> --json
+npx mi-note-cli create --title "标题" --content "# 正文" --json
+echo "正文" | npx mi-note-cli create --title "标题" --json
+npx mi-note-cli create --file ./note.md --folder <folderId> --json
 
 # 更新：仅传需要改的字段；不传 content 则只改元数据
-mi-note-cli update <id> --content "新正文" --json
-mi-note-cli update <id> --title "新标题" --json
+npx mi-note-cli update <id> --content "新正文" --json
+npx mi-note-cli update <id> --title "新标题" --json
 
 # 删除 / 移动 / 置顶
-mi-note-cli delete <id> -y --json            # 移到回收站
-mi-note-cli delete <id> --purge -y --json    # 永久删除
-mi-note-cli move <id> <folderId> --json
-mi-note-cli pin <id> --json
-mi-note-cli unpin <id> --json
+npx mi-note-cli delete <id> -y --json            # 移到回收站
+npx mi-note-cli delete <id> --purge -y --json    # 永久删除
+npx mi-note-cli move <id> <folderId> --json
+npx mi-note-cli pin <id> --json
+npx mi-note-cli unpin <id> --json
 ```
 
 ### 文件夹
 
 ```bash
-mi-note-cli folder create "名称" --json [--parent <id>]
-mi-note-cli folder rename <id> "新名称" --json
-mi-note-cli folder delete <id> -y --json [--purge]
+npx mi-note-cli folder create "名称" --json [--parent <id>]
+npx mi-note-cli folder rename <id> "新名称" --json
+npx mi-note-cli folder delete <id> -y --json [--purge]
 ```
 
 ### 图片
 
 ```bash
 # 1. 上传图片，得到 fileId 与可嵌入的 Markdown
-mi-note-cli upload-image ./photo.png --json
+npx mi-note-cli upload-image ./photo.png --json
 # 返回 data.markdown: ![图片](minote://image/xxxxxx)
 
 # 2. 把该 Markdown 放进 create/update 的 --content 中即可
@@ -68,8 +68,8 @@ mi-note-cli upload-image ./photo.png --json
 ### 导出（单向云→本地）
 
 ```bash
-mi-note-cli export -o <dir> --json   # 导出为 Markdown（含附件），永不修改云端
-mi-note-cli export -f -o <dir>       # 强制重新导出
+npx mi-note-cli export -o <dir> --json   # 导出为 Markdown（含附件），永不修改云端
+npx mi-note-cli export -f -o <dir>       # 强制重新导出
 ```
 
 export 只读云端、写本地，适合"只想备份"。本地内容相同则跳过；不回写云端。
@@ -77,10 +77,10 @@ export 只读云端、写本地，适合"只想备份"。本地内容相同则�
 ### 同步（双向）
 
 ```bash
-mi-note-cli sync -o <dir> --mode <mode> --json   # 双向同步
-mi-note-cli sync -o <dir> --dry-run              # 只预览计划不执行
-mi-note-cli sync init                            # 交互设默认模式
-mi-note-cli sync status --json                   # 查看配置与各目录状态
+npx mi-note-cli sync -o <dir> --mode <mode> --json   # 双向同步
+npx mi-note-cli sync -o <dir> --dry-run              # 只预览计划不执行
+npx mi-note-cli sync init                            # 交互设默认模式
+npx mi-note-cli sync status --json                   # 查看配置与各目录状态
 ```
 
 模式 `--mode`：
@@ -92,7 +92,7 @@ mi-note-cli sync status --json                   # 查看配置与各目录状�
 
 基于「上次同步基线 / 云端现状 / 本地现状」三方对比。冲突时：有优先方的模式自动解决；`two-way/manual` 在非交互环境**跳过并报告，绝不擅自删数据**（需交互或 `-y`）。
 
-遇到其他场景，优先 `mi-note-cli <command> --help` 查阅选项（--help 含输出约定、模式说明、示例）。
+遇到其他场景，优先 `npx mi-note-cli <command> --help` 查阅选项（--help 含输出约定、模式说明、示例）。
 
 ## 内容格式
 
