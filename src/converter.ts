@@ -157,6 +157,12 @@ export function xmlToMarkdown(
   text = text.replace(/<new-format\s*\/>/g, "");
   text = text.replace(/<0\/>/g, "");
 
+  // 多行 <quote>...</quote>：把内部换行用占位符替换，让整个 quote 合并成单行 token
+  // 交给 parseLine 解析时再还原。这样可以复用逐行解析的主循环。
+  text = text.replace(/<quote>([\s\S]*?)<\/quote>/g, (_m, inner: string) =>
+    `<quote>${inner.replace(/\n/g, "\u2028")}</quote>`,
+  );
+
   const lines = text.split("\n");
   const mdLines: string[] = [];
   let prevType = "";
@@ -239,7 +245,18 @@ function parseLine(line: string): ParsedLine | null {
 
   const quoteMatch = line.match(/^<quote>([\s\S]*?)<\/quote>$/);
   if (quoteMatch) {
-    return { type: "quote", text: `> ${convertInlineStyles(quoteMatch[1].trim())}` };
+    // 把 xmlToMarkdown 预处理时塞入的 \u2028 占位符还原为换行
+    const inner = quoteMatch[1].replace(/\u2028/g, "\n");
+    // 内部可能是小米客户端的多行形态：<text indent="1">行</text>\n<text>...</text>
+    // 也可能是旧的简单形态：直接 inline 文本
+    const innerTexts = [...inner.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)].map(
+      (m) => m[1].trim(),
+    );
+    const quoteLines = innerTexts.length > 0 ? innerTexts : [inner.trim()];
+    const text = quoteLines
+      .map((l) => `> ${convertInlineStyles(l)}`)
+      .join("\n");
+    return { type: "quote", text };
   }
 
   const textMatch = line.match(
@@ -365,7 +382,70 @@ export function markdownToXml(
   const out: string[] = [];
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
 
-  for (const rawLine of lines) {
+  // 多行 quote：把连续的 `> ` 行合并成单个 <quote><text>...</text>...</quote>
+  // 直接在主循环之外预处理，避免逐行匹配丢失上下文
+  type Block =
+    | { kind: "raw"; line: string }
+    | { kind: "quote"; lines: string[] };
+  const blocks: Block[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^>\s?(.*)$/);
+    if (m) {
+      const quoteLines: string[] = [m[1]];
+      while (i + 1 < lines.length) {
+        const m2 = lines[i + 1].match(/^>\s?(.*)$/);
+        if (!m2) break;
+        quoteLines.push(m2[1]);
+        i++;
+      }
+      blocks.push({ kind: "quote", lines: quoteLines });
+    } else {
+      blocks.push({ kind: "raw", line: lines[i] });
+    }
+  }
+
+  // 列表层级推断（栈式相对缩进）
+  // 维护一个 { width, level } 栈：遇到比栈顶宽的缩进进入下一级；相等保持；更窄则弹栈。
+  // 这样能容忍 2/3/4 空格混用、tab 缩进，无需做 CommonMark 完整解析。
+  const indentStack: { width: number; level: number }[] = [];
+  const widthOfLeading = (leading: string): number => {
+    let w = 0;
+    for (const c of leading) {
+      if (c === "\t") w += 4;
+      else if (c === " ") w += 1;
+      else break;
+    }
+    return w;
+  };
+  const determineListLevel = (leading: string): number => {
+    const width = widthOfLeading(leading);
+    while (indentStack.length > 0 && indentStack[indentStack.length - 1].width > width) {
+      indentStack.pop();
+    }
+    if (indentStack.length > 0 && indentStack[indentStack.length - 1].width === width) {
+      return indentStack[indentStack.length - 1].level;
+    }
+    const newLevel = indentStack.length === 0 ? 1 : indentStack[indentStack.length - 1].level + 1;
+    indentStack.push({ width, level: newLevel });
+    return newLevel;
+  };
+  const resetListStack = () => {
+    indentStack.length = 0;
+  };
+
+  for (const block of blocks) {
+    if (block.kind === "quote") {
+      // 多行 quote：每行作为一个内部 <text indent="1">；
+      // 单行 quote 也用同一格式，便于反向解析统一处理。
+      const inner = block.lines
+        .map((l) => `<text indent="1">${inlineMdToXml(l)}</text>`)
+        .join("\n");
+      out.push(`<quote>${inner}</quote>`);
+      resetListStack();
+      continue;
+    }
+
+    const rawLine = block.line;
     const line = rawLine.replace(/\s+$/g, "");
 
     // 图片：minote://image/{id} 或本地映射
@@ -374,6 +454,7 @@ export function markdownToXml(
       const fileId = resolveImageFileId(imageMatch[1], imageMap);
       if (fileId) {
         out.push(`<img fileid="${fileId}" imgshow="0" imgdes="" />`);
+        resetListStack();
         continue;
       }
     }
@@ -384,38 +465,33 @@ export function markdownToXml(
       const level = heading[1].length;
       const tag = level === 1 ? "size" : level === 2 ? "mid-size" : "h3-size";
       out.push(`<text indent="1"><${tag}>${escapeXml(heading[2])}</${tag}></text>`);
+      resetListStack();
       continue;
     }
 
     // 分割线
     if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
       out.push("<hr />");
+      resetListStack();
       continue;
     }
 
-    // 引用
-    const quote = line.match(/^>\s?(.*)$/);
-    if (quote) {
-      out.push(`<quote>${inlineMdToXml(quote[1])}</quote>`);
+    // 复选框（小米原生形态：indent="N" level="3"，level 含义未明但小米客户端固定写 3）
+    const checkbox = line.match(/^(\s*)- \[([xX ])\]\s+(.*)$/);
+    if (checkbox) {
+      const indent = determineListLevel(checkbox[1]);
+      const checked = checkbox[2].toLowerCase() === "x";
+      const checkedAttr = checked ? ' checked="true"' : "";
+      out.push(
+        `<input type="checkbox" indent="${indent}" level="3"${checkedAttr} />${inlineMdToXml(checkbox[3])}`,
+      );
       continue;
     }
 
-    // 复选框
-    if (/^(\s*)- \[x\]\s+/i.test(line)) {
-      const text = line.replace(/^(\s*)- \[x\]\s+/i, "");
-      out.push(`<input type="checkbox" checked="true" />${inlineMdToXml(text)}`);
-      continue;
-    }
-    if (/^(\s*)- \[ \]\s+/.test(line)) {
-      const text = line.replace(/^(\s*)- \[ \]\s+/, "");
-      out.push(`<input type="checkbox" checked="false" />${inlineMdToXml(text)}`);
-      continue;
-    }
-
-    // 无序列表（支持一级缩进）
+    // 无序列表
     const bullet = line.match(/^(\s*)[-*]\s+(.*)$/);
     if (bullet) {
-      const indent = computeIndent(bullet[1]);
+      const indent = determineListLevel(bullet[1]);
       out.push(`<bullet indent="${indent}" />${inlineMdToXml(bullet[2])}`);
       continue;
     }
@@ -426,7 +502,7 @@ export function markdownToXml(
     // - 必须显式带 inputNumber，按用户写的数字渲染；否则被 <text> 段落打断后，相邻自增计数会重置
     const order = line.match(/^(\s*)(\d+)\.\s+(.*)$/);
     if (order) {
-      const indent = computeIndent(order[1]);
+      const indent = determineListLevel(order[1]);
       const number = order[2];
       out.push(
         `<order indent="${indent}" inputNumber="${number}" />${inlineMdToXml(order[3])}`,
@@ -434,37 +510,46 @@ export function markdownToXml(
       continue;
     }
 
-    // 空行
+    // 空行：保留 <text indent="1"></text> 占位；列表栈不变（允许列表中间夹空行）
     if (!line.trim()) {
       out.push(`<text indent="1"></text>`);
       continue;
     }
 
-    // 普通文本
+    // 普通文本：会终止上一段列表的层级关系
     const indent = line.startsWith(INDENT_TAB) ? 2 : 1;
     const normalized = line.replace(/^\t/, "");
     out.push(`<text indent="${indent}">${inlineMdToXml(normalized)}</text>`);
+    resetListStack();
   }
 
   return out.join("\n");
 }
 
-/** 行内 Markdown → XML（加粗/斜体/删除线） */
+/**
+ * 行内 Markdown → XML（加粗/斜体/删除线/下划线）。
+ * 下划线在 markdown 中以 HTML 形式 `<u>...</u>` 书写——是 markdown 允许的内联 HTML。
+ */
 function inlineMdToXml(text: string): string {
-  let escaped = escapeXml(text);
-  escaped = escaped.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
-  escaped = escaped.replace(/(?<!\*)\*(?!\*)([^*]+?)\*(?!\*)/g, "<i>$1</i>");
-  escaped = escaped.replace(/~~(.+?)~~/g, "<delete>$1</delete>");
-  return escaped;
-}
-
-function computeIndent(leading: string): number {
-  if (!leading) return 1;
-  // 每 2 空格或 1 tab 视为一级缩进。小米客户端对 indent 不封顶，可以表达任意深度多级列表。
-  const tabs = (leading.match(/\t/g) || []).length;
-  const spaces = (leading.match(/ /g) || []).length;
-  const level = tabs + Math.floor(spaces / 2);
-  return 1 + level;
+  // 抽出 <u>...</u> 内容到占位符，避免被 escapeXml 转义；最后把内容（仍需 escape）放回 <u> 标签
+  const uPlaceholders: string[] = [];
+  const PH_OPEN = "\uE000U";
+  const PH_CLOSE = "\uE001";
+  let stage = text.replace(/<u>([\s\S]*?)<\/u>/g, (_m, inner: string) => {
+    const idx = uPlaceholders.length;
+    uPlaceholders.push(inner);
+    return `${PH_OPEN}${idx}${PH_CLOSE}`;
+  });
+  stage = escapeXml(stage);
+  stage = stage.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  stage = stage.replace(/(?<!\*)\*(?!\*)([^*]+?)\*(?!\*)/g, "<i>$1</i>");
+  stage = stage.replace(/~~(.+?)~~/g, "<delete>$1</delete>");
+  // 占位符还原成 <u>...</u>，内容仍需 escape（防 < & 等字符）
+  stage = stage.replace(
+    new RegExp(`${PH_OPEN}(\\d+)${PH_CLOSE}`, "g"),
+    (_m, idx: string) => `<u>${escapeXml(uPlaceholders[+idx])}</u>`,
+  );
+  return stage;
 }
 
 function resolveImageFileId(
