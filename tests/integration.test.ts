@@ -354,10 +354,10 @@ test("集成：sync 本地新增 .md 文件应上行创建云端", async (t) => 
     const { entries } = await client!.getAllNotes();
     const found = entries.find((e) => (e.snippet ?? "").includes("本地新增") || String(e.subject ?? "").includes("本地新增"));
     // 通过状态拿到新建的 id 更可靠
-    const cfg = JSON.parse(
-      await readFile(join(cfgDir, ".mi-note-cli.json"), "utf-8"),
+    const stateFile = JSON.parse(
+      await readFile(join(outDir, ".mi-note-cli.state.json"), "utf-8"),
     );
-    const ids = Object.keys(cfg.notes ?? {});
+    const ids = Object.keys(stateFile.notes ?? {});
     assert.ok(ids.length > 0, "状态应记录新建笔记的 id");
     createdId = ids[0];
     const detail = await client!.getNote(createdId!);

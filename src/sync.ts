@@ -13,17 +13,17 @@ import { buildExtraInfoString } from "./note.js";
 import { randomDelay, ensureFileDir, fileExists, ensureDir } from "./utils.js";
 import { logInfo } from "./output.js";
 import {
-  loadConfig,
-  loadDirState,
-  saveDirState,
-  toRelPath,
-  toAbsPath,
+  loadUserConfig,
+  loadState,
+  saveState,
+  toOutputRel,
+  toOutputAbs,
 } from "./config.js";
 import { classify, decide } from "./sync-diff.js";
 import type {
   RawNoteEntry,
   RawFolderEntry,
-  AppConfig,
+  SyncState,
   SyncNoteState,
   SyncMode,
   WriteNoteEntry,
@@ -69,7 +69,7 @@ export async function exportNotes(
 
   log("📂 开始导出...");
   // 文件名模板（可空）：循环外取一次，避免重复 IO
-  const cfg = await loadConfig();
+  const cfg = await loadUserConfig();
   const fileNameTemplate = cfg.fileNameTemplate;
 
   const { entries, folders } = await client.getAllNotes(200, (count) => {
@@ -187,10 +187,10 @@ export async function buildSyncPlan(
   quiet = false,
 ): Promise<{
   plan: SyncPlanItem[];
-  state: AppConfig;
+  state: SyncState;
   folders: Record<string, RawFolderEntry>;
 }> {
-  const state = await loadDirState(outputDir);
+  const state = await loadState(outputDir);
 
   const { entries, folders } = await client.getAllNotes(200, (count) => {
     if (!quiet) process.stderr.write(`\r📋 已获取 ${count} 条笔记...`);
@@ -212,11 +212,11 @@ export async function buildSyncPlan(
     const remote = remoteById.get(id);
     const base = state.notes[id];
 
-    // 先读本地（不依赖网络）。state 里 filePath 为相对项目根路径，读写时转绝对。
+    // 先读本地（不依赖网络）。state 里 filePath 为相对 output 的相对路径，读写时转绝对。
     let localMarkdown: string | undefined;
     let localHash: string | undefined;
     const relFilePath = base?.filePath ?? null;
-    const filePath = relFilePath ? toAbsPath(relFilePath) : null;
+    const filePath = relFilePath ? toOutputAbs(relFilePath, outputDir) : null;
     if (filePath && (await fileExists(filePath))) {
       localMarkdown = await readFile(filePath, "utf-8");
       localHash = computeHash(localMarkdown);
@@ -269,10 +269,10 @@ export async function buildSyncPlan(
 
   // 检测「本地新增文件」(#6)：输出目录下未被状态记录的 .md 文件。
   // 这些文件既不在云端 id 也不在状态 id 中，需单独扫描才能被上行同步发现。
-  // state 里 filePath 为相对项目根路径，比对前统一转绝对。
+  // state 里 filePath 为相对 output 的相对路径，比对前统一转绝对。
   const trackedPaths = new Set<string>();
   for (const n of Object.values(state.notes)) {
-    if (n.filePath) trackedPaths.add(toAbsPath(n.filePath));
+    if (n.filePath) trackedPaths.add(toOutputAbs(n.filePath, outputDir));
   }
   const localFiles = await scanMarkdownFiles(outputDir);
   for (const fp of localFiles) {
@@ -305,11 +305,13 @@ export async function executeSyncPlan(
   outputDir: string,
   mode: SyncMode,
   plan: SyncPlanItem[],
-  state: AppConfig,
+  state: SyncState,
   folders: Record<string, RawFolderEntry>,
   opts: { dryRun?: boolean; quiet?: boolean; resolveConflict?: ConflictResolver } = {},
 ): Promise<SyncResult> {
   const { dryRun = false, quiet = false, resolveConflict } = opts;
+  // 文件名模板从用户配置读一次（执行期不变）
+  const fileNameTemplate = (await loadUserConfig()).fileNameTemplate;
   const applied: Record<SyncAction, number> = {
     skip: 0,
     "update-local": 0,
@@ -343,12 +345,12 @@ export async function executeSyncPlan(
     }
 
     try {
-      await applyAction(client, outputDir, action, item, state, folders);
+      await applyAction(client, outputDir, action, item, state, folders, fileNameTemplate);
       applied[action]++;
       processed++;
       if (processed % SAVE_INTERVAL === 0) {
         state.lastSync = Date.now();
-        await saveDirState(state);
+        await saveState(outputDir, state);
       }
     } catch (err) {
       if (!quiet) {
@@ -361,7 +363,7 @@ export async function executeSyncPlan(
 
   if (!dryRun) {
     state.lastSync = Date.now();
-    await saveDirState(state);
+    await saveState(outputDir, state);
   }
 
   return {
@@ -380,8 +382,9 @@ async function applyAction(
   outputDir: string,
   action: SyncAction,
   item: SyncPlanItem,
-  state: AppConfig,
+  state: SyncState,
   folders: Record<string, RawFolderEntry>,
+  fileNameTemplate: string | undefined,
 ): Promise<void> {
   const id = item.id;
   switch (action) {
@@ -393,10 +396,10 @@ async function applyAction(
       // 下行：用云端覆盖/创建本地
       if (!item.remote || item.remoteMarkdown === undefined) return;
       const note = parseNoteEntry(item.remote);
-      const filePath = getNoteFilePath(note, folders, outputDir, state.fileNameTemplate); // 绝对路径
-      // 路径变化时清理旧文件（state 里 filePath 为相对，转绝对再比对/删除）
+      const filePath = getNoteFilePath(note, folders, outputDir, fileNameTemplate); // 绝对路径
+      // 路径变化时清理旧文件（state 里 filePath 为相对 output，转绝对再比对/删除）
       const oldRel = state.notes[id]?.filePath;
-      const oldPath = oldRel ? toAbsPath(oldRel) : null;
+      const oldPath = oldRel ? toOutputAbs(oldRel, outputDir) : null;
       if (oldPath && oldPath !== filePath && (await fileExists(oldPath))) {
         await rm(oldPath, { force: true });
       }
@@ -408,7 +411,7 @@ async function applyAction(
       state.notes[id] = {
         id,
         subject: note.subject,
-        filePath: toRelPath(filePath),
+        filePath: toOutputRel(filePath, outputDir),
         baseHash: computeHash(item.remoteMarkdown),
         localHash: computeHash(item.remoteMarkdown),
         remoteModify: item.remote.modifyDate,
@@ -418,9 +421,9 @@ async function applyAction(
 
     case "update-remote":
     case "create-remote": {
-      // 上行：用本地内容更新/创建云端。item.filePath 为绝对路径，存状态前转相对。
+      // 上行：用本地内容更新/创建云端。item.filePath 为绝对路径，存状态前转相对 output。
       if (item.localMarkdown === undefined) return;
-      const relPath = item.filePath ? toRelPath(item.filePath) : null;
+      const relPath = item.filePath ? toOutputRel(item.filePath, outputDir) : null;
       const xml = markdownToXml(item.localMarkdown);
       const now = Date.now();
       if (action === "create-remote") {

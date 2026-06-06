@@ -183,7 +183,7 @@ export interface ParsedNote {
    * 用户没为笔记起标题时为空字符串——**不会**回退到内容首行或 datetime。
    *
    * 供文件名模板的 `${title}` 占位符使用，让用户能区分「真有标题」与「兜底称呼」。
-   * 想要永有非空文件名请用 `${subject}`（见 `AppConfig.fileNameTemplate`）。
+   * 想要永有非空文件名请用 `${subject}`（见 `UserConfig.fileNameTemplate`）。
    */
   rawTitle: string;
   content: string;
@@ -222,8 +222,8 @@ export type SyncMode = "download" | "mirror" | "upload" | "two-way" | "manual";
  * - localHash：上次同步时本地文件内容哈希（用于判断本地是否被改动）
  * - remoteModify：上次同步时云端的 modifyDate
  *
- * filePath 存相对项目根（配置文件所在目录）的相对路径，
- * 因内容哈希本就跨机一致，相对路径让整个配置文件可随项目共享。
+ * filePath 存「相对 output 目录」的相对路径——state 文件本身就在 output 内，
+ * 整个 output 可整体搬迁仍能继续 sync（账号一致前提下）。跨机一致由内容 hash 保证。
  */
 export interface SyncNoteState {
   id: string;
@@ -237,19 +237,16 @@ export interface SyncNoteState {
 }
 
 /**
- * 项目本地配置文件结构（项目根 `.mi-note-cli.json`）。
+ * 用户配置（项目根 `.mi-note-cli/config.json`）。
  *
- * 配置随项目走而非全局：一台机器可有多个项目各自同步，
- * mode 等策略可随项目提交、在多人协作中共享。
- * - output：同步目录，相对项目根的相对路径
- * - mode：同步模式（缺省时回落到 manual）
- * - notes/folders：同步基线状态，filePath 用相对路径，跨机一致
+ * 用户手写、可入版控、可团队共享。所有字段均可选；缺省时各命令使用内置默认值。
+ * - mode：默认同步模式（缺省回落到 manual）
+ * - output：默认同步/导出目录（CLI `-o` 优先；都缺省时落到 `<root>/.mi-note-cli/output/`）
+ * - fileNameTemplate：见下方文档
  */
-export interface AppConfig {
-  output?: string;
+export interface UserConfig {
   mode?: SyncMode;
-  lastSync?: number | null;
-  syncTag?: string;
+  output?: string;
   /**
    * 同步落盘文件名模板（不含 `.md` 后缀）。
    *
@@ -266,6 +263,20 @@ export interface AppConfig {
    * 缺省（未设置）等价 `${subject}`：保持永有非空文件名。
    */
   fileNameTemplate?: string;
+}
+
+/**
+ * 同步状态（output 目录内 `.mi-note-cli.state.json`）。
+ *
+ * 工具自动生成、与具体 output 目录 1:1 绑定、不入版控。换 output 各自独立。
+ * - lastSync：上次同步时间戳
+ * - syncTag：服务端增量同步 tag（保留字段，目前未使用）
+ * - notes/folders：3-way diff 所需基线快照；notes[].filePath 相对 output
+ */
+export interface SyncState {
+  /** 上次同步时间戳；从未同步时为 null。loadState 已规范化缺失值为 null，消费者无需判 undefined */
+  lastSync: number | null;
+  syncTag?: string;
   notes: Record<string, SyncNoteState>;
   folders: Record<string, RawFolderEntry>;
 }

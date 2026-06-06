@@ -205,14 +205,14 @@ program
 program
   .command("export")
   .description("导出全部笔记为本地 Markdown（单向云→本地，永不修改云端）")
-  .option("-o, --output <dir>", "输出目录（默认 output）")
+  .option("-o, --output <dir>", "输出目录（缺省时取用户配置的 output；再缺省为 .mi-note-cli/output/）")
   .option("-f, --force", "强制重新导出（忽略本地已有同名文件）")
   .action((opts) => exportCommand(opts));
 
 const sync = program
   .command("sync")
   .description("双向同步本地与云端（3-way 差异 + 模式策略）")
-  .option("-o, --output <dir>", "同步目录（默认 output）")
+  .option("-o, --output <dir>", "同步目录（缺省时取用户配置的 output；再缺省为 .mi-note-cli/output/）")
   .option("-m, --mode <mode>", "同步模式：download/mirror/upload/two-way/manual")
   .option("--dry-run", "只列出同步计划，不实际执行")
   .option("-y, --yes", "跳过交互询问（非交互按模式处理，真冲突跳过）")
@@ -236,7 +236,7 @@ const sync = program
   mi-note-cli sync -o ./notes --dry-run        # 预览将发生什么
   mi-note-cli sync -o ./notes --mode two-way    # 双向同步
   mi-note-cli sync init                          # 引导设置默认模式
-  mi-note-cli sync status                        # 查看配置与各目录状态
+  mi-note-cli sync status                        # 查看配置与状态
 `,
   );
 
@@ -248,7 +248,8 @@ sync
 
 sync
   .command("status")
-  .description("查看同步配置与各目录状态")
-  .action(() => syncStatusCommand());
+  .description("查看用户配置与当前 output 的同步状态")
+  .option("-o, --output <dir>", "查看指定目录的状态（缺省时取用户配置的 output；再缺省为 .mi-note-cli/output/）")
+  .action((opts) => syncStatusCommand(opts));
 
 program.parseAsync(process.argv);

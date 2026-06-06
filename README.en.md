@@ -4,7 +4,7 @@ English | [简体中文](./README.md)
 
 A full-featured CLI for Xiaomi Cloud Notes (i.mi.com) — read, create, update, delete, move, and pin notes, manage folders, upload images, export, and **two-way sync**. **Designed for AI / scripting** (unified `--json` output, fail-fast in non-interactive mode).
 
-> Migrating from the old mi-note-export? See [MIGRATION.en.md](./MIGRATION.en.md).
+> Migrating from the old mi-note-export? See [MIGRATION.md](./MIGRATION.md) (Chinese only).
 
 ## Features
 
@@ -105,21 +105,25 @@ The tool auto-converts `minote://image/{fileId}` into Xiaomi's image markup.
 ## Data Directories
 
 - **Session cache** (macOS): `~/Library/Caches/mi-note-cli/` (`cookie` + `browser-data/`; may be cleared by the system/user as cache — just log in again).
-- **Config & sync state**: `.mi-note-cli.json` at the project root (read/written in whatever directory you run the CLI from).
-  - A single file holding the sync mode + sync directory + per-note sync baseline state.
-  - Note paths are stored **relative to the project root**, so the config can be committed alongside the project and shared across people/devices, keeping the team's sync mode consistent.
-  - If you'd rather not version-control the sync state, add `.mi-note-cli.json` to your `.gitignore`.
+- **User config**: `.mi-note-cli/config.json` at the project root, holding user preferences (sync mode / default output dir / filename template). The CLI reads/writes inside the directory you run it from. Safe to commit so a team can share the same preferences.
+- **Default output**: when neither user config nor CLI `-o` provides one, it falls back to `.mi-note-cli/output/` so things work zero-config.
+- **Sync state**: `<output>/.mi-note-cli.state.json`, holding the sync baseline (per-note content hash, `filePath`, last-synced remote modify time). Travels with the output directory — moving the whole output dir keeps sync working. Not for version control: just add the output dir to `.gitignore` and the state file is ignored along with it.
 
-### Custom sync filename (optional)
+### Customizing sync behavior (optional)
 
-Add a `fileNameTemplate` field to `.mi-note-cli.json` to control the output filename for `sync` / `export` (the `.md` extension is appended automatically):
+Add any of the following fields to `.mi-note-cli/config.json`:
 
 ```json
 {
   "mode": "mirror",
+  "output": "./mi-notes",
   "fileNameTemplate": "${YYYY}-${MM}-${DD}_${HH}-${mm}-${ss}[_${title}]"
 }
 ```
+
+- `mode`: default sync mode, used when `sync` runs without `--mode`
+- `output`: default sync/export directory, used when `sync` / `export` runs without `-o` (relative paths resolve against the project root)
+- `fileNameTemplate`: filename format for `sync` / `export` (the `.md` extension is appended automatically)
 
 With this template, exported filenames look like:
 

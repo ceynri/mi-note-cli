@@ -105,23 +105,27 @@ mi-note-cli create --title "带图" --content "看图：
 ## 数据目录
 
 - **登录态缓存**（macOS）：`~/Library/Caches/mi-note-cli/`（`cookie` + `browser-data/`，可被系统/用户当缓存清理，清了重新 login 即可）
-- **配置与同步状态**：项目根目录下的 `.mi-note-cli.json`（CLI 在哪个目录执行，就在该目录读写）。
-  - 单一文件，存放同步模式 + 同步目录 + 各笔记的同步基线状态。
-  - 笔记路径以**相对项目根**的相对路径记录，配置可随项目一起提交、在多人/多设备间共享，团队同步策略（mode）保持一致。
-  - 若不希望把同步状态纳入版本控制，可将 `.mi-note-cli.json` 加入 `.gitignore`。
+- **用户配置**：项目根 `.mi-note-cli/config.json`，存同步模式 / 默认同步目录 / 文件名模板等用户偏好。CLI 在哪个目录执行就在该目录的 `.mi-note-cli/` 下读写。可随项目提交，团队共享同一份偏好。
+- **默认 output**：用户配置和 CLI `-o` 都缺省时，落到 `.mi-note-cli/output/`，零配置即可使用。
+- **同步状态**：`<output>/.mi-note-cli.state.json`，存同步基线（各笔记的内容哈希、`filePath`、上次同步云端 modify 等）。跟着 output 目录走，整个 output 可整体迁移仍可继续 sync；不入版控，把 output 加进 `.gitignore` 就一并忽略。
 
-### 自定义同步文件名（可选）
+### 自定义同步行为（可选）
 
-在 `.mi-note-cli.json` 中加 `fileNameTemplate` 字段，控制 `sync` / `export` 落盘时的文件名格式（不含 `.md` 后缀）：
+在 `.mi-note-cli/config.json` 中可加以下字段：
 
 ```json
 {
   "mode": "mirror",
+  "output": "./mi-notes",
   "fileNameTemplate": "${YYYY}-${MM}-${DD}_${HH}-${mm}-${ss}[_${title}]"
 }
 ```
 
-以这个模板为例，导出的文件名会长成：
+- `mode`：默认同步模式，`sync` 不传 `--mode` 时使用
+- `output`：默认同步/导出目录，`sync` / `export` 不传 `-o` 时使用（相对路径基于项目根）
+- `fileNameTemplate`：控制 `sync` / `export` 落盘时的文件名格式（不含 `.md` 后缀）
+
+以上面的模板为例，导出的文件名会长成：
 
 - 有标题的笔记 → `2026-06-06_14-03-00_读书笔记.md`
 - 没起标题的笔记 → `2026-06-06_14-03-00.md`

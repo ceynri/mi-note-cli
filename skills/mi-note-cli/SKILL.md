@@ -105,7 +105,9 @@ npx mi-note-cli sync status --json                   # 查看配置与各目录�
 ## 运行时数据
 
 - 登录态缓存：`~/Library/Caches/mi-note-cli/`（`cookie` + `browser-data/`）
-- 配置与同步状态：项目根目录下单一 `.mi-note-cli.json`（CLI 在哪个目录执行就在该目录读写），存放同步模式 + 同步目录 + 各笔记同步基线；路径以相对项目根记录，可随项目提交、跨设备/多人共享。
+- 用户配置：项目根 `.mi-note-cli/config.json`，存 `mode` / `output` / `fileNameTemplate` 等用户偏好；可入版控、团队共享
+- 默认 output：用户配置和 CLI `-o` 都缺省时落到 `.mi-note-cli/output/`
+- 同步状态：`<output>/.mi-note-cli.state.json`，存同步基线（笔记内容哈希、`filePath`、上次同步云端 modify）；自动生成、跟 output 1:1 绑定、不入版控
 
 ## 限制（客观条件，无法实现）
 

@@ -1,5 +1,3 @@
-[English](./MIGRATION.en.md) | 简体中文
-
 # 从 mi-note-export 迁移到 mi-note-cli
 
 `mi-note-cli` 是一个功能完整、独立的小米云笔记命令行工具。如果你之前用的是只能导出的 `mi-note-export`，本文帮你迁移。
@@ -34,21 +32,24 @@
 ## 配置与状态
 
 - 旧：工作目录的 `.mi-note-export.json` + 输出目录内的 `.sync-state.json`。
-- 新：项目根目录下的单一 `.mi-note-cli.json`，存放同步模式 + 同步目录 + 各笔记的同步基线状态。笔记路径以相对项目根的相对路径记录，配置可随项目提交、跨设备/多人共享。
+- 新：拆成两份，思路与旧 mi-note-export 一致——
+  - **用户配置**：项目根 `.mi-note-cli/config.json`，存 `mode` / `output` / `fileNameTemplate` 等用户偏好（可入版控、团队共享）
+  - **同步状态**：`<output>/.mi-note-cli.state.json`，存同步基线（自动生成、跟 output 1:1 绑定、不入版控）
+- 默认 output 落到 `.mi-note-cli/output/`，用户既不传 `-o` 也未配 `output` 时使用。
 
 不会自动导入旧配置。复刻旧设置：
 
 ```bash
 # 旧: { "output": "./my-notes" }
 # 新: 直接传 -o，或用 init 设默认同步模式
-mi-note-cli export -o ./my-notes      # 单向，行为同旧工具
+mi-note-cli export -o ./mi-notes      # 单向，行为同旧工具
 mi-note-cli sync init                  # 可选：设默认同步模式
 ```
 
 ## 推荐路径
 
 1. `mi-note-cli login`
-2. 只想备份（旧行为）：`mi-note-cli export -o ./my-notes`
-3. 想让本地修改回流云端：`mi-note-cli sync -o ./my-notes --mode two-way`
+2. 只想备份（旧行为）：`mi-note-cli export -o ./mi-notes`
+3. 想让本地修改回流云端：`mi-note-cli sync -o ./mi-notes --mode two-way`
 
 你的 `mi-note-export` 安装与数据原样保留，可独立保留或删除。

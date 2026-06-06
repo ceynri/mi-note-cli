@@ -6,15 +6,16 @@ import {
 } from "../sync.js";
 import {
   resolveMode,
+  resolveOutputDir,
   setMode,
-  loadConfig,
-  getConfigPath,
-  toAbsPath,
+  loadUserConfig,
+  loadState,
+  getUserConfigPath,
+  getStatePath,
   ALL_MODES,
 } from "../config.js";
 import { isJsonMode, success, logInfo, fail } from "../output.js";
 import { createInterface } from "node:readline";
-import { resolve } from "node:path";
 import type { SyncMode } from "../types.js";
 import type { SyncAction } from "../sync-diff.js";
 
@@ -47,8 +48,8 @@ const SCENARIO_DESC: Record<string, string> = {
 /** sync 主命令 */
 export async function syncCommand(opts: SyncOptions): Promise<void> {
   try {
-    const outputDir = resolve(opts.output || "output");
-    const mode = await resolveMode(outputDir, opts.mode as SyncMode | undefined);
+    const outputDir = await resolveOutputDir(opts.output);
+    const mode = await resolveMode(opts.mode as SyncMode | undefined);
 
     if (opts.mode && !ALL_MODES.includes(opts.mode as SyncMode)) {
       throw new Error(
@@ -139,33 +140,34 @@ export async function syncInitCommand(_opts: { output?: string }): Promise<void>
     await setMode(mode);
     rl.close();
 
-    success({ mode, configPath: getConfigPath() }, () => {
+    success({ mode, configPath: getUserConfigPath() }, () => {
       logInfo(`\n✅ 已将项目默认同步模式设为：${mode}`);
-      logInfo(`   配置文件：${getConfigPath()}`);
+      logInfo(`   配置文件：${getUserConfigPath()}`);
+      logInfo(`   提示：可在该文件中加 "output" 字段设置默认同步目录。`);
     });
   } catch (err) {
     fail(err);
   }
 }
 
-/** sync status：查看当前项目的同步配置与状态 */
-export async function syncStatusCommand(): Promise<void> {
+/** sync status：查看用户配置 + 当前 output 的同步状态 */
+export async function syncStatusCommand(opts: { output?: string }): Promise<void> {
   try {
-    const config = await loadConfig();
-    success(config, () => {
-      logInfo(`配置文件：${getConfigPath()}`);
+    const config = await loadUserConfig();
+    const outputDir = await resolveOutputDir(opts.output);
+    const state = await loadState(outputDir);
+
+    success({ config, outputDir, state }, () => {
+      logInfo(`配置文件：${getUserConfigPath()}`);
       logInfo(`同步模式：${config.mode ?? "manual（默认）"}`);
-      if (!config.output && Object.keys(config.notes).length === 0) {
-        logInfo("（暂无同步记录，尚未执行过 sync）");
-        return;
-      }
-      const last = config.lastSync
-        ? new Date(config.lastSync).toLocaleString("zh-CN")
+      if (config.output) logInfo(`默认目录：${config.output}`);
+      if (config.fileNameTemplate) logInfo(`文件名模板：${config.fileNameTemplate}`);
+      logInfo(`\n输出目录：${outputDir}`);
+      logInfo(`状态文件：${getStatePath(outputDir)}`);
+      const last = state.lastSync
+        ? new Date(state.lastSync).toLocaleString("zh-CN")
         : "从未";
-      if (config.output) {
-        logInfo(`同步目录：${config.output}  →  ${toAbsPath(config.output)}`);
-      }
-      logInfo(`笔记记录：${Object.keys(config.notes).length}  上次同步：${last}`);
+      logInfo(`笔记记录：${Object.keys(state.notes).length}  上次同步：${last}`);
     });
   } catch (err) {
     fail(err);
