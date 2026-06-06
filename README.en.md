@@ -110,12 +110,76 @@ The tool auto-converts `minote://image/{fileId}` into Xiaomi's image markup.
   - Note paths are stored **relative to the project root**, so the config can be committed alongside the project and shared across people/devices, keeping the team's sync mode consistent.
   - If you'd rather not version-control the sync state, add `.mi-note-cli.json` to your `.gitignore`.
 
+### Custom sync filename (optional)
+
+Add a `fileNameTemplate` field to `.mi-note-cli.json` to control the output filename for `sync` / `export` (the `.md` extension is appended automatically):
+
+```json
+{
+  "mode": "mirror",
+  "fileNameTemplate": "${YYYY}-${MM}-${DD}_${HH}-${mm}-${ss}[_${title}]"
+}
+```
+
+With this template, exported filenames look like:
+
+- Note with a title → `2026-06-06_14-03-00_reading-notes.md`
+- Note without a title → `2026-06-06_14-03-00.md`
+
+**Placeholders**
+
+| Placeholder | Meaning |
+|---|---|
+| `${YYYY}` / `${YY}` | 4-digit / 2-digit year |
+| `${MM}` `${DD}` | Month / day (zero-padded) |
+| `${HH}` `${mm}` `${ss}` | Hour / minute / second (24-hour, zero-padded) |
+| `${title}` | The note's real title. **Empty** when the user didn't set one |
+| `${subject}` | A non-empty subject: real title if set, otherwise the first content line or the creation timestamp |
+| `${id}` | Note ID |
+
+Time fields are based on the note's **creation time** in the local timezone.
+
+**Conditional segments `[...]`**
+
+A bracketed segment is rendered only when **all** of its `${var}` placeholders are non-empty; otherwise the whole segment (including its separators) disappears. The most common use is wrapping the optional title segment:
+
+```
+${YYYY}-${MM}-${DD}[_${title}]
+```
+
+- With title → `2026-06-06_reading-notes`
+- Without title → `2026-06-06`
+
+Use `\[` / `\]` to write literal brackets.
+
+**Default behavior**
+
+When `fileNameTemplate` is unset, the behavior is equivalent to `${subject}` — always a non-empty filename. Templates **do not support `/`** — folder hierarchy is always derived from the cloud-side folder; the template only produces the basename.
+
 ## Known Limitations
+
+### Service capabilities
 
 - **Trash listing / restore**: no public API; deleted notes can only be restored within 30 days via the [i.mi.com](https://i.mi.com) web UI.
 - **Private notes / dedicated to-do type / mind maps**: no stable write API; best-effort on export, no editing.
 - **User tags**: Xiaomi Notes has no user-tag system (the `tag` field is a sync version).
 - **Cookie lifetime**: when the short-lived `serviceToken` expires, the CLI silently refreshes it using the persisted long-lived session — usually no need to `login` again; you only need to re-run `login` once the long-lived session itself expires.
+
+### Markdown coverage (experimental)
+
+> The project is in early stages with limited real-world usage, and the converter may have known or unknown gaps. Validate on a small subset first for important notes, and keep manual backups of critical content — feedback on incorrect conversions is very welcome.
+
+**Stably supported** (covered by both unit and integration round-trip tests): headings (H1–H3), ordered / unordered lists (including multi-level nesting and paragraph-broken numbering), checkboxes, blockquotes, horizontal rules, bold `**bold**` / italic `*italic*` / strikethrough `~~strike~~` / underline `<u>...</u>`, links, inline code, paragraphs, image attachments.
+
+**Currently unsupported**: tables, footnotes, definition lists, fenced code-block language tags, Setext-style headings (`===` / `---`), inline HTML other than `<u>`. These will be silently dropped or kept as literal text during conversion.
+
+**Two-way sync caveat**: the 3-way diff compares in Markdown space — if the conversion isn't lossless, the diff treats the drift as "remote-side change" and may overwrite. If you rely heavily on syntax outside the whitelist above, or notice your local markdown style being rewritten after sync, prefer `manual` / `two-way` mode (which pauses on disagreement) over `mirror`.
+
+---
+
+## Contributing & Feedback
+
+The project is in early stages — for any conversion oddities, missing features, new placeholder ideas — please [open an issue](https://github.com/ceynri/mi-note-cli/issues) or PR. The smaller the repro, the better.
 
 ---
 

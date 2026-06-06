@@ -176,7 +176,16 @@ export interface NoteFile {
 export interface ParsedNote {
   id: string;
   folderId: string;
+  /** 用于落盘的标题（已 sanitize；缺标题时回退为内容首行 / 创建时间字符串） */
   subject: string;
+  /**
+   * 真实标题（未 sanitize）。仅取自 `extraInfo.title` 或笔记 `subject` 字段。
+   * 用户没为笔记起标题时为空字符串——**不会**回退到内容首行或 datetime。
+   *
+   * 供文件名模板的 `${title}` 占位符使用，让用户能区分「真有标题」与「兜底称呼」。
+   * 想要永有非空文件名请用 `${subject}`（见 `AppConfig.fileNameTemplate`）。
+   */
+  rawTitle: string;
   content: string;
   files: NoteFile[];
   createDate?: number;
@@ -241,6 +250,22 @@ export interface AppConfig {
   mode?: SyncMode;
   lastSync?: number | null;
   syncTag?: string;
+  /**
+   * 同步落盘文件名模板（不含 `.md` 后缀）。
+   *
+   * 支持占位符：
+   * - `${YYYY}` `${YY}` `${MM}` `${DD}` `${HH}` `${mm}` `${ss}`：笔记 `createDate` 的本地时区分量
+   * - `${title}`：真实标题，未填即空（适合搭配条件段语法）
+   * - `${subject}`：带兜底的称呼（真实标题 → 内容首行 → datetime），永远非空
+   * - `${id}`：笔记 id
+   *
+   * 条件段 `[...]`：方括号内全部 `${var}` 都非空才渲染，否则整块丢弃。用于把可选段
+   * 连同其引导分隔符一起包起来，例如 `${YYYY}-${MM}-${DD}[_${title}]` 在无标题时
+   * 自然得到 `2026-06-06`。字面 `[` `]` 用 `\[` `\]` 转义。
+   *
+   * 缺省（未设置）等价 `${subject}`：保持永有非空文件名。
+   */
+  fileNameTemplate?: string;
   notes: Record<string, SyncNoteState>;
   folders: Record<string, RawFolderEntry>;
 }

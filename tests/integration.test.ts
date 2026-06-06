@@ -2,7 +2,8 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { peekOrRefreshAuth, refreshAuth } from "../src/auth.ts";
 import { MiNoteClient } from "../src/client.ts";
 import { exportNotes } from "../src/sync.ts";
@@ -14,6 +15,8 @@ import {
 } from "../src/converter.ts";
 import { buildExtraInfoString } from "../src/note.ts";
 import type { WriteNoteEntry } from "../src/types.ts";
+
+const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
 /**
  * 真实 API 集成测试（需要有效登录态）。
@@ -376,5 +379,49 @@ test("集成：sync 本地新增 .md 文件应上行创建云端", async (t) => 
     await rm(cfgDir, { recursive: true, force: true });
     if (prevCfg === undefined) delete process.env.MI_NOTE_CLI_CONFIG_DIR;
     else process.env.MI_NOTE_CLI_CONFIG_DIR = prevCfg;
+  }
+});
+
+// ============ round-trip 综合夹具：上传 → 拉取 → 转回 md → XML 语义相等 ============
+
+test("集成：综合夹具 round-trip（上传→拉取→md→XML 语义相等）", async (t) => {
+  if (skipIfUnavailable(t)) return;
+
+  const md = await readFile(join(FIXTURES_DIR, "round-trip.md"), "utf-8");
+  const xml = markdownToXml(md);
+
+  const now = Date.now();
+  const created = await client!.createNote({
+    colorId: 0,
+    folderId: "0",
+    createDate: now,
+    modifyDate: now,
+    content: xml,
+    alertDate: 0,
+    setting: { themeId: 0, stickyTime: 0, version: 0 },
+    extraInfo: buildExtraInfoString(`${PREFIX} round-trip ${now}`),
+    snippet: extractSnippet(xml),
+  });
+  const id = String(created.id);
+  console.error(`  → 上传 round-trip 夹具 ${id}`);
+
+  try {
+    const fetched = await client!.getNote(id);
+    const cloudMd = xmlToMarkdown(parseNoteEntry(fetched).content);
+    // 把云端回拉的 md 再次 markdownToXml，与原夹具的 XML 比对（语义相等）。
+    // 这样规避云端可能的字符串级规范化（空白、属性顺序等），只验证语义往返不丢东西
+    const cloudXmlAgain = markdownToXml(cloudMd);
+    assert.equal(
+      cloudXmlAgain,
+      xml,
+      "云端回拉后再次转出的 XML 应与原始 XML 严格相等（语义守恒）",
+    );
+    // 同时再做一次本地 md 守恒断言：cloudMd 应能与原 md trim 后相等（双保险）
+    assert.equal(cloudMd.trim(), md.trim(), "云端回拉的 md 应与原夹具 md 一致（trim 后）");
+    console.error(`  → round-trip 校验通过（XML 语义相等 + md trim 相等）`);
+  } finally {
+    const latest = await client!.getNote(id);
+    await client!.deleteNote(id, latest.tag, true);
+    console.error(`  → 已永久删除 round-trip 测试笔记 ${id}`);
   }
 });

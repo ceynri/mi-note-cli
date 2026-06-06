@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { formatDateTime, sanitizeFileName } from "./utils.js";
+import { formatDateTime, getDateTokens, sanitizeFileName } from "./utils.js";
 import type {
   RawNoteEntry,
   RawFolderEntry,
@@ -71,11 +71,12 @@ export function parseExtraInfo(
 
 /** 派生笔记标题（extraInfo.title > subject > 内容首行 > 创建时间） */
 export function deriveTitle(note: RawNoteEntry): string {
-  const extra = parseExtraInfo(note.extraInfo);
-  const extraTitle = (extra.title as string)?.trim();
-  if (extraTitle) return extraTitle;
-  if (note.subject?.trim()) return note.subject.trim();
+  const raw = deriveRawTitle(note);
+  if (raw) return raw;
 
+  // legacy fallback：抽内容首行作为标题（用于无模板时的默认文件名）
+  // 注意此分支**仅用于 `ParsedNote.subject` 的 legacy 默认路径**，不进入 `rawTitle`，
+  // 因此模板 `${title}` 在无真标题时不会拿到内容首行——避免把正文一句话扔进文件名。
   const firstLine = xmlToMarkdown(note.snippet ?? note.content ?? "")
     .split("\n")
     .map((l) => l.trim())
@@ -83,6 +84,22 @@ export function deriveTitle(note: RawNoteEntry): string {
   if (firstLine) return firstLine;
 
   return formatDateTime(note.createDate || Date.now());
+}
+
+/**
+ * 派生「真标题」：仅取 `extraInfo.title` 或 `RawNoteEntry.subject` 这两个**显式标题字段**，
+ * 都为空则返回空字符串。
+ *
+ * 与 `deriveTitle` 的区别：**不**回退到「内容首行」——内容首行属于正文，把它当标题贴进
+ * 文件名模板会让 `${title}` 拿到一句话甚至一长串文字，违背「title 表示用户为笔记起的名字」
+ * 这一直觉。文件名模板专用，由调用方决定空值时如何兜底（智能裁分隔符 / datetime 等）。
+ */
+export function deriveRawTitle(note: RawNoteEntry): string {
+  const extra = parseExtraInfo(note.extraInfo);
+  const extraTitle = (extra.title as string)?.trim();
+  if (extraTitle) return extraTitle;
+  if (note.subject?.trim()) return note.subject.trim();
+  return "";
 }
 
 /** 解析原始 entry 为领域模型 */
@@ -97,12 +114,14 @@ export function parseNoteEntry(note: RawNoteEntry): ParsedNote {
   }
 
   const subject = sanitizeFileName(deriveTitle(note));
+  const rawTitle = deriveRawTitle(note);
   const files = parseNoteFiles(note);
 
   return {
     id,
     folderId,
     subject,
+    rawTitle,
     content,
     files,
     createDate: note.createDate,
@@ -167,9 +186,16 @@ export function xmlToMarkdown(
   const mdLines: string[] = [];
   let prevType = "";
 
+  // 按 indent 分组的运行计数器：解析 inputNumber=0 时的真实序号。
+  // 任何非 order 行（或无法识别行）都会清空，与 Mi Note 客户端「order 链被打断即重置」的语义对齐。
+  const orderCounters = new Map<number, number>();
+
   for (const line of lines) {
-    const parsed = parseLine(line.trim());
-    if (parsed === null) continue;
+    const parsed = parseLine(line.trim(), orderCounters);
+    if (parsed === null) {
+      orderCounters.clear();
+      continue;
+    }
     if (mdLines.length > 0 && needsBlankLine(prevType, parsed.type)) {
       mdLines.push("");
     }
@@ -200,8 +226,43 @@ function needsBlankLine(prevType: string, currType: string): boolean {
   return false;
 }
 
-function parseLine(line: string): ParsedLine | null {
-  if (!line) return { type: "blank", text: "" };
+function parseLine(
+  line: string,
+  orderCounters?: Map<number, number>,
+): ParsedLine | null {
+  if (!line) {
+    orderCounters?.clear();
+    return { type: "blank", text: "" };
+  }
+
+  // order：小米客户端原生形态 `<order indent="N" inputNumber="X" />文本`
+  // - inputNumber>0：显式数字，刷新该层运行计数器为该值（后续 inputNumber=0 接续 +1）
+  // - inputNumber=0 或缺省：取该层运行计数 +1（首次出现即 1）
+  // - 进入更浅层时，所有更深 indent 的计数器作废
+  // 此分支必须放在「清空计数器」之前——它是唯一会读写计数器的分支。
+  const orderSelfMatch = line.match(
+    /^<order\s+indent="(\d+)"(?:\s+inputNumber="(\d+)")?\s*\/>(.*)$/,
+  );
+  if (orderSelfMatch) {
+    const indent = getIndentLevel(orderSelfMatch[1]);
+    const numberRaw = orderSelfMatch[2];
+    const explicit = numberRaw ? Number(numberRaw) : 0;
+    let number: number;
+    if (orderCounters) {
+      for (const k of [...orderCounters.keys()]) {
+        if (k > indent) orderCounters.delete(k);
+      }
+      number =
+        explicit > 0 ? explicit : (orderCounters.get(indent) ?? 0) + 1;
+      orderCounters.set(indent, number);
+    } else {
+      number = explicit > 0 ? explicit : 1;
+    }
+    return formatListItem("order", `${number}.`, orderSelfMatch[1], orderSelfMatch[3]);
+  }
+
+  // 其余分支均视为 order 链被打断（含 hr / 复选框 / bullet / quote / 普通文本 / 标题等）
+  orderCounters?.clear();
 
   if (/^<hr\s*\/>$/.test(line)) return { type: "hr", text: "---" };
 
@@ -219,17 +280,6 @@ function parseLine(line: string): ParsedLine | null {
     const txt = convertInlineStyles(inner);
     const spaces = "  ".repeat(indent);
     return { type: "checkbox", text: `${spaces}- [${checked ? "x" : " "}] ${txt}` };
-  }
-
-  // order：小米客户端原生形态 `<order indent="N" inputNumber="X" />文本`
-  // inputNumber 显式指定渲染序号；缺省或 0 表示按相邻规则自增计数（导出时回退为 1）。
-  const orderSelfMatch = line.match(
-    /^<order\s+indent="(\d+)"(?:\s+inputNumber="(\d+)")?\s*\/>(.*)$/,
-  );
-  if (orderSelfMatch) {
-    const numberRaw = orderSelfMatch[2];
-    const number = !numberRaw || numberRaw === "0" ? "1" : numberRaw;
-    return formatListItem("order", `${number}.`, orderSelfMatch[1], orderSelfMatch[3]);
   }
 
   const bulletMatch = line.match(
@@ -613,17 +663,101 @@ function isWide(ch: string): boolean {
 
 // ============ 文件路径 ============
 
+/**
+ * 计算笔记落盘路径（含目录：云端 folder → 一级子目录）。
+ *
+ * - `template` 缺省：文件名直接用 `note.subject`（已含 datetime fallback，向后兼容）
+ * - `template` 非空：按模板渲染（占位符替换 + 智能裁分隔符 + sanitize），
+ *   渲染后为空时回退到创建时间字符串，避免产出空文件名
+ */
 export function getNoteFilePath(
   note: ParsedNote,
   folders: Record<string, RawFolderEntry>,
   outputDir: string,
+  template?: string,
 ): string {
   const folder = note.folderId ? folders[note.folderId] : undefined;
   const folderName = folder ? sanitizeFileName(folder.subject || "") : "";
-  const fileName = `${note.subject}.md`;
+  const baseName =
+    template && template.trim() ? renderFileNameTemplate(template, note) : note.subject;
+  const fileName = `${baseName}.md`;
   return folderName
     ? join(outputDir, folderName, fileName)
     : join(outputDir, fileName);
+}
+
+/**
+ * 渲染文件名模板。
+ *
+ * 占位符（字面替换）：
+ * - `${YYYY}` `${YY}` `${MM}` `${DD}` `${HH}` `${mm}` `${ss}`：基于 `createDate` 的本地时区分量
+ *   （`YYYY`=4 位年，`YY`=2 位年，其余两位零填充）
+ * - `${title}`：真实标题，用户没填即空字符串
+ * - `${subject}`：带兜底的笔记称呼（标题 → 内容首行 → datetime），永远非空
+ * - `${id}`：笔记 id
+ * - 未识别的 `${xxx}` 原样保留
+ *
+ * 条件段语法 `[...]`：
+ *   方括号内的内容只有当所有 `${var}` 都非空时才渲染，否则**整块丢弃**——
+ *   主要用法是把可选段连同其引导分隔符一起包起来，避免空 title 导致多余分隔符。
+ *   - 例：`${YYYY}-${MM}-${DD}[_${title}]` → 有标题 `2026-06-06_工作`，无标题 `2026-06-06`
+ *   - 不支持嵌套；未匹配的 `[` 当字面保留
+ *   - 字面 `[` `]` 用 `\[` `\]` 转义
+ *
+ * 后处理：
+ * 1. 经 `sanitizeFileName` 清理 OS 非法字符
+ * 2. 若结果为空（如模板仅有 `${title}` 且无标题），回退到 datetime 防止产出空文件名
+ *
+ * 不做首尾/连续分隔符的隐式处理——所见即所得，可选段请用 `[...]` 显式表达。
+ */
+export function renderFileNameTemplate(template: string, note: ParsedNote): string {
+  const ts = note.createDate || Date.now();
+  const t = getDateTokens(ts);
+  const vars: Record<string, string> = {
+    YYYY: t.YYYY,
+    YY: t.YY,
+    MM: t.MM,
+    DD: t.DD,
+    HH: t.HH,
+    mm: t.mm,
+    ss: t.ss,
+    title: note.rawTitle,
+    subject: note.subject,
+    id: note.id,
+  };
+
+  // 用 NUL/SOH 哨兵临时替换 `\[` `\]` 转义，避免被条件段解析器误吞。
+  // 这两个控制字符在文件名里非法，不会与用户输入冲突。
+  const ESC_OPEN = "\u0000";
+  const ESC_CLOSE = "\u0001";
+  let s = template.replace(/\\\[/g, ESC_OPEN).replace(/\\\]/g, ESC_CLOSE);
+
+  // 条件段：`[...]` 内任一 `${var}` 为空 → 整块丢；全非空 → 正常渲染。
+  // flat 不支持嵌套；未匹配的 `[` 不会被这里命中，自然作为字面留到下一步。
+  s = s.replace(/\[([^\[\]]*)\]/g, (_, segment: string) => {
+    let allFilled = true;
+    const rendered = segment.replace(/\$\{(\w+)\}/g, (m, key: string) => {
+      if (!Object.prototype.hasOwnProperty.call(vars, key)) return m;
+      const v = vars[key];
+      if (!v) allFilled = false;
+      return v;
+    });
+    return allFilled ? rendered : "";
+  });
+
+  // 段外剩余 `${var}`
+  s = s.replace(/\$\{(\w+)\}/g, (m, key: string) =>
+    Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : m,
+  );
+
+  // 还原转义的字面 `[` `]`
+  s = s.replace(new RegExp(ESC_OPEN, "g"), "[").replace(new RegExp(ESC_CLOSE, "g"), "]");
+
+  const cleaned = sanitizeFileName(s);
+  if (cleaned) return cleaned;
+
+  // 兜底：模板渲染为空时（如纯 `${title}` 无标题）退回 datetime，绝不产出空文件名
+  return formatDateTime(ts);
 }
 
 // ============ 工具 ============

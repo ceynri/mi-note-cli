@@ -50,6 +50,7 @@ export async function loadConfig(): Promise<AppConfig> {
       mode: parsed.mode,
       lastSync: parsed.lastSync ?? null,
       syncTag: parsed.syncTag,
+      fileNameTemplate: parsed.fileNameTemplate,
       notes: parsed.notes ?? {},
       folders: parsed.folders ?? {},
     };

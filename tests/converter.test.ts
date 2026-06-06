@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   xmlToMarkdown,
   markdownToXml,
@@ -7,8 +10,11 @@ import {
   parseNoteEntry,
   extractSnippet,
   truncateDisplay,
+  renderFileNameTemplate,
 } from "../src/converter.ts";
-import type { RawNoteEntry } from "../src/types.ts";
+import type { RawNoteEntry, ParsedNote } from "../src/types.ts";
+
+const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
 test("truncateDisplay: 短文本不截断", () => {
   assert.equal(truncateDisplay("短标题", 60), "短标题");
@@ -46,10 +52,10 @@ test("xmlToMarkdown: 无序/有序列表", () => {
 });
 
 test("xmlToMarkdown: 自闭合 order/bullet（小米客户端真实形态）", () => {
-  // 含 inputNumber 时按显式数字渲染；缺省时回退为 1（向后兼容）
+  // 含 inputNumber>0 时按显式数字渲染；缺省 / inputNumber=0 时按同层运行计数自增。
   const xml =
-    `<order indent="1" inputNumber="2" />显式二\n<order indent="1" />缺省一\n<bullet indent="1" />无序项`;
-  assert.equal(xmlToMarkdown(xml), "2. 显式二\n1. 缺省一\n- 无序项");
+    `<order indent="1" inputNumber="2" />显式二\n<order indent="1" />缺省接续\n<bullet indent="1" />无序项`;
+  assert.equal(xmlToMarkdown(xml), "2. 显式二\n3. 缺省接续\n- 无序项");
 });
 
 test("xmlToMarkdown: 复选框", () => {
@@ -156,14 +162,94 @@ test("xmlToMarkdown: 多级列表反向解析（小米客户端真实形态）",
     '<order indent="3" inputNumber="0" />三级',
     '<order indent="1" inputNumber="0" />一级 B',
   ].join("\n");
-  // inputNumber=0 时回退为 1（客户端自身按相邻规则计数；导出时只能取静态值）
+  // inputNumber=0 时按「同 indent 运行计数器 +1」自增；进入更浅层时深层计数器作废。
   // 缩进按 2 空格/级
   const md = xmlToMarkdown(xml);
   assert.ok(md.includes("1. 一级 A"));
   assert.ok(md.includes("  1. 二级 a"));
-  assert.ok(md.includes("  1. 二级 b"));
+  assert.ok(md.includes("  2. 二级 b"));
   assert.ok(md.includes("    1. 三级"));
-  assert.ok(md.includes("1. 一级 B"));
+  assert.ok(md.includes("2. 一级 B"));
+});
+
+test("xmlToMarkdown: order 自动续号被深浅层切换（回归 #order-autonumber）", () => {
+  // 复刻「测试0606」笔记的真实形态：含显式 inputNumber + 多级嵌套 + 跨层回弹。
+  // 期望：显式数字保留，inputNumber=0 沿用同层运行计数，跨层回弹时深层计数器作废。
+  const xml = [
+    '<order indent="1" inputNumber="3" />一级第三段',
+    '<order indent="2" inputNumber="0" />二级',
+    '<order indent="2" inputNumber="0" />二级第二段',
+    '<order indent="2" inputNumber="0" />二级第三段',
+    '<order indent="3" inputNumber="0" />三级',
+    '<order indent="3" inputNumber="0" />三级第二段',
+    '<order indent="4" inputNumber="0" />四级',
+    '<order indent="4" inputNumber="0" />四级第二段',
+    '<order indent="3" inputNumber="0" />三级第三段',
+    '<order indent="1" inputNumber="0" />一级第四段',
+  ].join("\n");
+  assert.equal(
+    xmlToMarkdown(xml),
+    [
+      "3. 一级第三段",
+      "  1. 二级",
+      "  2. 二级第二段",
+      "  3. 二级第三段",
+      "    1. 三级",
+      "    2. 三级第二段",
+      "      1. 四级",
+      "      2. 四级第二段",
+      "    3. 三级第三段",
+      "4. 一级第四段",
+    ].join("\n"),
+  );
+});
+
+test("xmlToMarkdown: order 链被普通文本打断后重新从 1 开始", () => {
+  // Mi Note 客户端语义：任何非 order 内容（含空段落 <text indent="1"></text>）都会重置自动续号。
+  const xml = [
+    '<order indent="1" inputNumber="0" />A',
+    '<text indent="1">中间段落</text>',
+    '<order indent="1" inputNumber="0" />B',
+    '<text indent="1"></text>',
+    '<order indent="1" inputNumber="0" />C',
+  ].join("\n");
+  const md = xmlToMarkdown(xml);
+  // A、B、C 都是各自链条的首项，都应输出 1.
+  assert.ok(md.includes("1. A"));
+  assert.ok(md.includes("1. B"));
+  assert.ok(md.includes("1. C"));
+});
+
+test("xmlToMarkdown: 显式 inputNumber 后接 inputNumber=0 时基于显式值续号", () => {
+  // 用户在客户端写「5.」（显式 5）后回车继续输入（自动续号 6）
+  const xml = [
+    '<order indent="1" inputNumber="5" />A',
+    '<order indent="1" inputNumber="0" />B',
+    '<order indent="1" inputNumber="0" />C',
+  ].join("\n");
+  const md = xmlToMarkdown(xml);
+  assert.ok(md.includes("5. A"));
+  assert.ok(md.includes("6. B"));
+  assert.ok(md.includes("7. C"));
+});
+
+test("xmlToMarkdown: order 被段落打断后用显式数字续上文（不重置回 1）", () => {
+  // 场景：1.A 2.B → 中间 <text> 段落打断 → 用户写 3.C 4.D 想接续上文
+  // 关键语义：段落打断会清空运行计数器，但下一个 order 若带显式 inputNumber 就以该值刷新计数器；
+  //          同链后续 inputNumber=0 在显式值基础上继续 +1（覆盖「重新从 1 开始」分支）
+  const xml = [
+    '<order indent="1" inputNumber="1" />A',
+    '<order indent="1" inputNumber="2" />B',
+    '<text indent="1">中间段落</text>',
+    '<order indent="1" inputNumber="3" />C',
+    '<order indent="1" inputNumber="0" />D',
+  ].join("\n");
+  const md = xmlToMarkdown(xml);
+  assert.ok(md.includes("1. A"));
+  assert.ok(md.includes("2. B"));
+  assert.ok(md.includes("3. C"));
+  // 显式 3 刷新计数器，inputNumber=0 应得 4（而非被 <text> 重置后的 1）
+  assert.ok(md.includes("4. D"), `应得 4. D，实际：${md}`);
 });
 
 // ============ 多行 quote ============
@@ -437,4 +523,185 @@ test("parseNoteEntry: 规范化字段", () => {
 test("extractSnippet: 取首个非空行", () => {
   assert.equal(extractSnippet("\n\n<text>第一</text>\n<text>第二</text>"), "<text>第一</text>");
   assert.equal(extractSnippet(""), "");
+});
+
+// ============================================================
+// 文件名模板渲染
+// ============================================================
+
+/**
+ * 构造一个最小可用的 ParsedNote，仅模板渲染会读到的字段。
+ *
+ * - `rawTitle`：真实标题（默认空，表示用户没起标题）
+ * - `subject`：带兜底的称呼（默认随 rawTitle 而定，无 rawTitle 时给一个占位字符串
+ *   模拟 deriveTitle 的内容首行/datetime 兜底；显式传入则覆盖）
+ */
+function makeNote(opts: {
+  rawTitle?: string;
+  subject?: string;
+  id?: string;
+  createDate?: number;
+} = {}): ParsedNote {
+  const rawTitle = opts.rawTitle ?? "";
+  return {
+    id: opts.id ?? "n123",
+    folderId: "",
+    subject: opts.subject ?? (rawTitle || "fallback-subject"),
+    rawTitle,
+    content: "",
+    files: [],
+    createDate: opts.createDate,
+    modifyDate: undefined,
+    contentType: "note",
+  };
+}
+
+// 用一个固定时间戳，避免依赖时区（我们只断言「占位符被替换」而非具体值，
+// 但不同分量的零填充行为需要稳定可断言，因此用本地构造的时间）
+const FIXED = new Date(2026, 5, 6, 14, 3, 0).getTime(); // 2026-06-06 14:03:00 本地
+
+test("renderFileNameTemplate: 仅 ${title}，有标题", () => {
+  const r = renderFileNameTemplate("${title}", makeNote({ rawTitle: "读书笔记", createDate: FIXED }));
+  assert.equal(r, "读书笔记");
+});
+
+test("renderFileNameTemplate: 仅 ${title}，无标题回退到 datetime", () => {
+  const r = renderFileNameTemplate("${title}", makeNote({ rawTitle: "", createDate: FIXED }));
+  assert.equal(r, "2026-06-06_14-03-00");
+});
+
+test("renderFileNameTemplate: ${subject} 永有兜底（即使无真实标题）", () => {
+  // 用户没起标题时，${title} = ""，${subject} = 内容首行/datetime（这里模拟为 fallback-subject）
+  const r = renderFileNameTemplate(
+    "${subject}",
+    makeNote({ rawTitle: "", subject: "内容首行截断", createDate: FIXED }),
+  );
+  assert.equal(r, "内容首行截断");
+});
+
+test("renderFileNameTemplate: ${title} vs ${subject} 同模板对比", () => {
+  // 同一笔记：rawTitle="" subject="内容首行兜底"
+  const note = makeNote({ rawTitle: "", subject: "内容首行兜底", createDate: FIXED });
+  // ${title} 走严格语义 → 空 → 触发 datetime 兜底（仅 ${title} 时整体渲染为空）
+  assert.equal(renderFileNameTemplate("${title}", note), "2026-06-06_14-03-00");
+  // ${subject} 走兜底语义 → 用首行
+  assert.equal(
+    renderFileNameTemplate("${YYYY}-${MM}-${DD}-${subject}", note),
+    "2026-06-06-内容首行兜底",
+  );
+});
+
+test("renderFileNameTemplate: ${YY} 取年份后两位", () => {
+  const r = renderFileNameTemplate(
+    "${YY}-${MM}-${DD}",
+    makeNote({ createDate: FIXED }),
+  );
+  assert.equal(r, "26-06-06");
+});
+
+test("renderFileNameTemplate: 字面字符照原样保留（不做 trim/collapse）", () => {
+  // 中间字面分隔符
+  assert.equal(
+    renderFileNameTemplate("${YYYY}_${MM}_${DD}_笔记", makeNote({ createDate: FIXED })),
+    "2026_06_06_笔记",
+  );
+  // 中间双下划线
+  assert.equal(
+    renderFileNameTemplate("${YYYY}__${MM}", makeNote({ createDate: FIXED })),
+    "2026__06",
+  );
+  // 尾部字面分隔符也保留（用户写什么就是什么；空 title 用 [...] 显式处理）
+  assert.equal(
+    renderFileNameTemplate("${YYYY}_笔记_", makeNote({ createDate: FIXED })),
+    "2026_笔记_",
+  );
+});
+
+// ============ [...] 条件段 ============
+
+test("renderFileNameTemplate: [...] 内 ${title} 非空时整段渲染", () => {
+  const r = renderFileNameTemplate(
+    "${YYYY}-${MM}-${DD}[_${title}]",
+    makeNote({ rawTitle: "读书笔记", createDate: FIXED }),
+  );
+  assert.equal(r, "2026-06-06_读书笔记");
+});
+
+test("renderFileNameTemplate: [...] 内 ${title} 为空时整段消失", () => {
+  const r = renderFileNameTemplate(
+    "${YYYY}-${MM}-${DD}[_${title}]",
+    makeNote({ rawTitle: "", createDate: FIXED }),
+  );
+  assert.equal(r, "2026-06-06");
+});
+
+test("renderFileNameTemplate: [...] 块内多个 ${var} 任一为空则整块丢", () => {
+  // [${title}-${id}]：title 空 → 整块（含 id）一起丢
+  const note = makeNote({ rawTitle: "", id: "42", createDate: FIXED });
+  assert.equal(
+    renderFileNameTemplate("${YYYY}[-${title}-${id}]", note),
+    "2026",
+  );
+  // 同模板，title 非空 → 整块渲染
+  const note2 = makeNote({ rawTitle: "甲", id: "42", createDate: FIXED });
+  assert.equal(
+    renderFileNameTemplate("${YYYY}[-${title}-${id}]", note2),
+    "2026-甲-42",
+  );
+});
+
+test("renderFileNameTemplate: 多个 [...] 段相互独立", () => {
+  const note = makeNote({ rawTitle: "标题", id: "42", createDate: FIXED });
+  // 两段都渲染
+  assert.equal(
+    renderFileNameTemplate("[${title}][_${id}]", note),
+    "标题_42",
+  );
+  // 第一段消失、第二段保留
+  const note2 = makeNote({ rawTitle: "", id: "42", createDate: FIXED });
+  assert.equal(
+    renderFileNameTemplate("${YYYY}[_${title}][_${id}]", note2),
+    "2026_42",
+  );
+});
+
+test("renderFileNameTemplate: \\[ \\] 转义产出字面方括号", () => {
+  const r = renderFileNameTemplate(
+    "\\[${YYYY}\\]_${title}",
+    makeNote({ rawTitle: "标题", createDate: FIXED }),
+  );
+  assert.equal(r, "[2026]_标题");
+});
+
+test("renderFileNameTemplate: 未配对的 [ 当作字面保留", () => {
+  // 单独的 `[` 不会被条件段 regex 匹配，自然作为字面留下
+  const r = renderFileNameTemplate(
+    "${YYYY}[unclosed",
+    makeNote({ createDate: FIXED }),
+  );
+  assert.equal(r, "2026[unclosed");
+});
+
+// ============ 其他占位符 ============
+
+test("renderFileNameTemplate: ${id} 占位符", () => {
+  const r = renderFileNameTemplate("${id}-${title}", makeNote({ id: "42", rawTitle: "x", createDate: FIXED }));
+  assert.equal(r, "42-x");
+});
+
+test("renderFileNameTemplate: 未识别占位符原样保留", () => {
+  const r = renderFileNameTemplate("${unknown}-${title}", makeNote({ rawTitle: "标题", createDate: FIXED }));
+  assert.equal(r, "${unknown}-标题");
+});
+
+// ============================================================
+// 文件级 round-trip：md → xml → md 字节相等（夹具守恒）
+// ============================================================
+
+test("round-trip: 综合夹具 md → xml → md 严格相等（trim 后）", () => {
+  const md = readFileSync(join(FIXTURES_DIR, "round-trip.md"), "utf-8");
+  const xml = markdownToXml(md);
+  const back = xmlToMarkdown(xml);
+  // xmlToMarkdown 末尾 trim() 会去掉文件末尾换行，原文也 trim 后比对
+  assert.equal(back.trim(), md.trim());
 });

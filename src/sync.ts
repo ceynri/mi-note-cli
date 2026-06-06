@@ -12,7 +12,13 @@ import {
 import { buildExtraInfoString } from "./note.js";
 import { randomDelay, ensureFileDir, fileExists, ensureDir } from "./utils.js";
 import { logInfo } from "./output.js";
-import { loadDirState, saveDirState, toRelPath, toAbsPath } from "./config.js";
+import {
+  loadConfig,
+  loadDirState,
+  saveDirState,
+  toRelPath,
+  toAbsPath,
+} from "./config.js";
 import { classify, decide } from "./sync-diff.js";
 import type {
   RawNoteEntry,
@@ -62,6 +68,10 @@ export async function exportNotes(
   };
 
   log("📂 开始导出...");
+  // 文件名模板（可空）：循环外取一次，避免重复 IO
+  const cfg = await loadConfig();
+  const fileNameTemplate = cfg.fileNameTemplate;
+
   const { entries, folders } = await client.getAllNotes(200, (count) => {
     if (!quiet) process.stderr.write(`\r📋 已获取 ${count} 条笔记...`);
   });
@@ -91,7 +101,7 @@ export async function exportNotes(
         continue;
       }
 
-      const filePath = getNoteFilePath(note, folders, outputDir);
+      const filePath = getNoteFilePath(note, folders, outputDir, fileNameTemplate);
       // 增量：本地已存在且内容相同则跳过
       if (!force && (await fileExists(filePath))) {
         const existing = await readFile(filePath, "utf-8");
@@ -383,7 +393,7 @@ async function applyAction(
       // 下行：用云端覆盖/创建本地
       if (!item.remote || item.remoteMarkdown === undefined) return;
       const note = parseNoteEntry(item.remote);
-      const filePath = getNoteFilePath(note, folders, outputDir); // 绝对路径
+      const filePath = getNoteFilePath(note, folders, outputDir, state.fileNameTemplate); // 绝对路径
       // 路径变化时清理旧文件（state 里 filePath 为相对，转绝对再比对/删除）
       const oldRel = state.notes[id]?.filePath;
       const oldPath = oldRel ? toAbsPath(oldRel) : null;

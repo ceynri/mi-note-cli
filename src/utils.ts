@@ -29,13 +29,37 @@ export function randomDelay(baseMs: number, jitterRatio = 0.5): Promise<void> {
   return delay(Math.max(50, Math.round(baseMs + jitter)));
 }
 
-/** 格式化为 YYYY-MM-DD_HH-mm-ss */
-export function formatDateTime(ts: number): string {
+/** 时间分量（按本地时区拆出年/月/日/时/分/秒，用于文件名模板替换） */
+export interface DateTokens {
+  YYYY: string;
+  YY: string;
+  MM: string;
+  DD: string;
+  HH: string;
+  mm: string;
+  ss: string;
+}
+
+/** 把时间戳拆为本地时区的零填充分量 */
+export function getDateTokens(ts: number): DateTokens {
   const d = new Date(ts);
   const pad = (n: number): string => String(n).padStart(2, "0");
-  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const time = `${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
-  return `${date}_${time}`;
+  const yyyy = String(d.getFullYear());
+  return {
+    YYYY: yyyy,
+    YY: yyyy.slice(-2),
+    MM: pad(d.getMonth() + 1),
+    DD: pad(d.getDate()),
+    HH: pad(d.getHours()),
+    mm: pad(d.getMinutes()),
+    ss: pad(d.getSeconds()),
+  };
+}
+
+/** 格式化为 YYYY-MM-DD_HH-mm-ss */
+export function formatDateTime(ts: number): string {
+  const t = getDateTokens(ts);
+  return `${t.YYYY}-${t.MM}-${t.DD}_${t.HH}-${t.mm}-${t.ss}`;
 }
 
 /** 确保目录存在 */
