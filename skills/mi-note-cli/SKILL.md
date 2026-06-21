@@ -107,11 +107,20 @@ npx mi-note-cli sync status --json                   # 查看配置与各目录�
 
 **绝对禁止**：仅凭 subject 相似或时间接近就推断是同一篇笔记并直接删除。
 
+## 用户配置
+
+项目根 `.mi-note-cli/config.json`，可入版控、团队共享。所有字段均可选，缺省使用内置默认值。
+
+- `syncMode`：默认同步模式，默认同步模式，模式含义见上方「同步（双向）」
+- `output`：默认输出目录，CLI `-o` 优先；都缺省时落到 `.mi-note-cli/output/`
+- `fileNameTemplate`：同步落盘文件名模板（不含 `.md` 后缀）。缺省等价 `${subject}`
+  - 占位符：`${YYYY}` `${YY}` `${MM}` `${DD}` `${HH}` `${mm}` `${ss}`（createDate 本地时区分量）、`${title}`（真实标题，未填即空）、`${subject}`（带兜底，永远非空）、`${id}`
+  - 条件段 `[...]`：方括号内所有 `${var}` 都非空才渲染，否则整块丢弃。例：`${YYYY}-${MM}-${DD}[_${title}]` → 有标题 `2026-06-06_工作`，无标题 `2026-06-06`
+  - 字面 `[` `]` 用 `\[` `\]` 转义
+
 ## 运行时数据
 
 - 登录态缓存：`~/Library/Caches/mi-note-cli/`（`cookie` + `browser-data/`）
-- 用户配置：项目根 `.mi-note-cli/config.json`，存 `syncMode` / `output` / `fileNameTemplate` 等用户偏好；可入版控、团队共享
-- 默认 output：用户配置和 CLI `-o` 都缺省时落到 `.mi-note-cli/output/`
 - 同步状态：`<output>/.mi-note-cli.state.json`，存同步基线（笔记内容哈希、`filePath`、上次同步云端 modify）；自动生成、跟 output 1:1 绑定、不入版控
 
 ## 限制（客观条件，无法实现）
