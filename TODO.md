@@ -1,22 +1,5 @@
 # TODO
 
-## 去掉指令名后缀 `cli`
-
-把 `mi-note-cli` 指令名字的后缀 `cli` 去掉。
-
-受影响位置：
-- `package.json` 里的 `name` 字段
-- `README.md` / `README.en.md` 里的命令示例
-- `src/cli.ts` 里的程序名（如果 hard code）
-- 代码里任何以 `mi-note-cli` 作为命令名展示或生成的地方
-
-注意：
-- 去掉后缀后新的指令名应该叫 `mi-note`
-- 需要确认 npm publish 时包名是否也要一起改
-- 改名后需要同步更新依赖该命令名的脚本、CI、Skill、文档
-
-为什么暂缓：属于破坏性变更，需要确认发布策略（major version bump + 迁移说明），不忙当前主线。
-
 ## Markdown 风格偏好配置
 
 让 `xmlToMarkdown` 输出按用户偏好选择行内 markup 形式，并让 `markdownToXml` 同时识别多种形式。
