@@ -4,7 +4,14 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/)，版本号遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased] [[compare]](https://github.com/ceynri/mi-note-cli/compare/v0.3.0...HEAD)
+## [Unreleased] [[compare]](https://github.com/ceynri/mi-note-cli/compare/v0.3.1...HEAD)
+
+## [0.3.1] - 2026-06-22 [[compare]](https://github.com/ceynri/mi-note-cli/compare/v0.3.0...v0.3.1)
+
+### Changed
+
+- 明确 `export` 与 `sync --mode cloud-first` 的区别：状态文件、本地文件删除行为、`--force` 全量重下，在 README、CLI `--help`、SKILL.md 中补充对比说明
+- SKILL.md 用户配置说明移至独立章节
 
 ## [0.3.0] - 2026-06-22 [[compare]](https://github.com/ceynri/mi-note-cli/compare/v0.2.0...v0.3.0)
 

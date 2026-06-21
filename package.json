@@ -1,6 +1,6 @@
 {
   "name": "mi-note-cli",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A full-featured CLI for Xiaomi Cloud Notes (i.mi.com) — read, create, update, delete, move, pin notes, manage folders, upload images, bidirectional sync, and export to Markdown. Designed to be AI-friendly.",
   "type": "module",
   "bin": {
