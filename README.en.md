@@ -6,6 +6,8 @@ A full-featured CLI for Xiaomi Cloud Notes (i.mi.com) — read, create, update, 
 
 > Migrating from the old mi-note-export? See [MIGRATION.md](./MIGRATION.md) (Chinese only).
 
+> ⚠️ **Experimental**: This project is still iterating rapidly — even minor version (`x.Y.z`) bumps may contain breaking changes. If you need stability, lock your dependency to the minor version (e.g., `~0.1.0` instead of `^0.1.0`). If an update causes problems, check the latest [Releases](https://github.com/ceynri/mi-note-cli/releases) for changes; verified issues can be filed as a new [issue](https://github.com/ceynri/mi-note-cli/issues).
+
 ## Features
 
 - **Auth**: interactive browser login with cookie caching
@@ -81,13 +83,12 @@ All commands support the global `--json` flag, producing `{ ok, data }` / `{ ok:
 
 | Mode | Behavior |
 |---|---|
-| `download` | Cloud wins: cloud overwrites local; local changes never uploaded |
-| `mirror` | Local mirror: download only; local changes detected but not uploaded |
-| `upload` | Local wins: everything uploaded to cloud |
+| `cloud-first` | Cloud wins: download only; conflicts resolved by cloud |
+| `local-first` | Local wins: upload only; conflicts resolved by local |
 | `two-way` | Auto bidirectional: one-sided changes sync automatically; only real conflicts pause |
 | `manual` (default) | Interactive: every divergence is listed and asked one by one |
 
-Conflicts (both-changed / one-side-deleted-other-changed): `download/mirror/upload` resolve automatically by their declared winner; `two-way/manual` ask interactively, or in non-interactive contexts skip and report — **never deleting data on their own**.
+Conflicts (both-changed / one-side-deleted-other-changed): `cloud-first`/`local-first` resolve automatically by their declared winner; `two-way`/`manual` ask interactively, or in non-interactive contexts skip and report — **never deleting data on their own**.
 
 Use `sync init` to set a default mode interactively; then `sync` can omit `--mode`. `sync --dry-run` previews without executing.
 
@@ -115,13 +116,13 @@ Add any of the following fields to `.mi-note-cli/config.json`:
 
 ```json
 {
-  "mode": "mirror",
+  "syncMode": "cloud-first",
   "output": "./mi-notes",
   "fileNameTemplate": "${YYYY}-${MM}-${DD}_${HH}-${mm}-${ss}[_${title}]"
 }
 ```
 
-- `mode`: default sync mode, used when `sync` runs without `--mode`
+- `syncMode`: default sync mode, used when `sync` runs without `--mode`
 - `output`: default sync/export directory, used when `sync` / `export` runs without `-o` (relative paths resolve against the project root)
 - `fileNameTemplate`: filename format for `sync` / `export` (the `.md` extension is appended automatically)
 
@@ -177,7 +178,7 @@ When `fileNameTemplate` is unset, the behavior is equivalent to `${subject}` —
 
 **Currently unsupported**: tables, footnotes, definition lists, fenced code-block language tags, Setext-style headings (`===` / `---`), inline HTML other than `<u>`. These will be silently dropped or kept as literal text during conversion.
 
-**Two-way sync caveat**: the 3-way diff compares in Markdown space — if the conversion isn't lossless, the diff treats the drift as "remote-side change" and may overwrite. If you rely heavily on syntax outside the whitelist above, or notice your local markdown style being rewritten after sync, prefer `manual` / `two-way` mode (which pauses on disagreement) over `mirror`.
+**Two-way sync caveat**: the 3-way diff compares in Markdown space — if the conversion isn't lossless, the diff treats the drift as "remote-side change" and may overwrite. If you rely heavily on syntax outside the whitelist above, or notice your local markdown style being rewritten after sync, prefer `manual` / `two-way` mode (which pauses on disagreement) over `cloud-first`.
 
 ---
 

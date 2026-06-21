@@ -5,9 +5,9 @@ import {
   type SyncPlanItem,
 } from "../sync.js";
 import {
-  resolveMode,
+  resolveSyncMode,
   resolveOutputDir,
-  setMode,
+  setSyncMode,
   loadUserConfig,
   loadState,
   getUserConfigPath,
@@ -21,15 +21,14 @@ import type { SyncAction } from "../sync-diff.js";
 
 interface SyncOptions {
   output?: string;
-  mode?: string;
+  mode?: SyncMode;
   dryRun?: boolean;
   yes?: boolean;
 }
 
 const MODE_DESC: Record<SyncMode, string> = {
-  download: "云端优先：一切以云端为准，覆盖本地，不上行本地变更",
-  mirror: "本地镜像：云→本地下行，本地变更只检测不上行（≈纯导出）",
-  upload: "本地优先：一切以本地为准上行到云端",
+  "cloud-first": "云端优先：仅下行，冲突以云端为准",
+  "local-first": "本地优先：仅上行，冲突以本地为准",
   "two-way": "双向自动：单边改自动同步，真冲突才停下询问",
   manual: "交互（默认）：任何不一致都列出并逐条询问",
 };
@@ -48,14 +47,14 @@ const SCENARIO_DESC: Record<string, string> = {
 /** sync 主命令 */
 export async function syncCommand(opts: SyncOptions): Promise<void> {
   try {
-    const outputDir = await resolveOutputDir(opts.output);
-    const mode = await resolveMode(opts.mode as SyncMode | undefined);
-
-    if (opts.mode && !ALL_MODES.includes(opts.mode as SyncMode)) {
+    if (opts.mode && !ALL_MODES.includes(opts.mode)) {
       throw new Error(
         `未知模式：${opts.mode}。可选：${ALL_MODES.join(" / ")}`,
       );
     }
+
+    const outputDir = await resolveOutputDir(opts.output);
+    const mode = await resolveSyncMode(opts.mode);
 
     const client = await getClient();
     logInfo(`🔁 同步模式：${mode}（${MODE_DESC[mode]}）`);
@@ -132,12 +131,12 @@ export async function syncInitCommand(_opts: { output?: string }): Promise<void>
     const ask = (q: string): Promise<string> =>
       new Promise((res) => rl.question(q, res));
 
-    const idxStr = await ask("\n选择默认模式 [1-5，默认 5 manual]: ");
+    const idxStr = await ask(`\n选择默认模式 [1-${ALL_MODES.length}，默认 ${ALL_MODES.length} manual]: `);
     const idx = parseInt(idxStr.trim(), 10);
     const mode: SyncMode =
       idx >= 1 && idx <= ALL_MODES.length ? ALL_MODES[idx - 1] : "manual";
 
-    await setMode(mode);
+    await setSyncMode(mode);
     rl.close();
 
     success({ mode, configPath: getUserConfigPath() }, () => {
@@ -159,7 +158,7 @@ export async function syncStatusCommand(opts: { output?: string }): Promise<void
 
     success({ config, outputDir, state }, () => {
       logInfo(`配置文件：${getUserConfigPath()}`);
-      logInfo(`同步模式：${config.mode ?? "manual（默认）"}`);
+      logInfo(`同步模式：${config.syncMode ?? "manual（默认）"}`);
       if (config.output) logInfo(`默认目录：${config.output}`);
       if (config.fileNameTemplate) logInfo(`文件名模板：${config.fileNameTemplate}`);
       logInfo(`\n输出目录：${outputDir}`);

@@ -33,7 +33,7 @@
 
 - 旧：工作目录的 `.mi-note-export.json` + 输出目录内的 `.sync-state.json`。
 - 新：拆成两份，思路与旧 mi-note-export 一致——
-  - **用户配置**：项目根 `.mi-note-cli/config.json`，存 `mode` / `output` / `fileNameTemplate` 等用户偏好（可入版控、团队共享）
+  - **用户配置**：项目根 `.mi-note-cli/config.json`，存 `syncMode` / `output` / `fileNameTemplate` 等用户偏好（可入版控、团队共享）
   - **同步状态**：`<output>/.mi-note-cli.state.json`，存同步基线（自动生成、跟 output 1:1 绑定、不入版控）
 - 默认 output 落到 `.mi-note-cli/output/`，用户既不传 `-o` 也未配 `output` 时使用。
 

@@ -97,7 +97,7 @@ export function classify(input: ThreeWayInput): Scenario {
  *
  * 设计要点：
  * - 非冲突场景（#2/#3/#5/#6/#7/#9）方向明确，按 mode 的"是否允许下行/上行/删除"裁剪。
- * - 冲突场景（#4/#8/#10）：有明确优先方的 mode（download/mirror/upload）按优先方解决；
+ * - 冲突场景（#4/#8/#10）：有明确优先方的 mode（cloud-first/local-first）按优先方解决；
  *   manual / two-way 返回 `conflict`，交由调用方处理（交互询问或非交互跳过报告）。
  */
 export function decide(scenario: Scenario, mode: SyncMode): SyncAction {
@@ -106,38 +106,38 @@ export function decide(scenario: Scenario, mode: SyncMode): SyncAction {
       return "skip";
 
     case "remote-changed": // #2 仅云端改
-      // 除 upload（本地优先、忽略云端变更）外都下行
-      return mode === "upload" ? "skip" : "update-local";
+      // 除 local-first（本地优先、忽略云端变更）外都下行
+      return mode === "local-first" ? "skip" : "update-local";
 
     case "local-changed": // #3 仅本地改
       // 只有会上行的模式才更新云端
-      return mode === "upload" || mode === "two-way"
+      return mode === "local-first" || mode === "two-way"
         ? "update-remote"
         : mode === "manual"
           ? "conflict" // manual 任何不一致都问
-          : "skip"; // download / mirror 不上行
+          : "skip"; // cloud-first 不上行
 
     case "remote-new": // #5 云端新增
-      return mode === "upload" ? "skip" : "create-local";
+      return mode === "local-first" ? "skip" : "create-local";
 
     case "local-new": // #6 本地新增
-      return mode === "upload" || mode === "two-way"
+      return mode === "local-first" || mode === "two-way"
         ? "create-remote"
         : mode === "manual"
           ? "conflict"
-          : "skip"; // download / mirror 不上行
+          : "skip"; // cloud-first 不上行
 
     case "remote-deleted-local-clean": // #7 云删本地未改
-      // 删本地以跟随云端；upload 模式视本地为权威，反而重建云端
-      if (mode === "upload") return "create-remote";
+      // 删本地以跟随云端；local-first 模式视本地为权威，反而重建云端
+      if (mode === "local-first") return "create-remote";
       if (mode === "manual") return "conflict";
       return "delete-local";
 
     case "local-deleted-remote-clean": // #9 本地删云未改
-      // 删云端以跟随本地；download/mirror 视云端为权威，反而重建本地
-      if (mode === "download" || mode === "mirror") return "create-local";
+      // 删云端以跟随本地；cloud-first 视云端为权威，反而重建本地
+      if (mode === "cloud-first") return "create-local";
       if (mode === "manual") return "conflict";
-      return "delete-remote"; // upload / two-way
+      return "delete-remote"; // local-first / two-way
 
     case "both-deleted": // #11
       return "drop-state";
@@ -158,12 +158,11 @@ export function decide(scenario: Scenario, mode: SyncMode): SyncAction {
  */
 function resolveConflict(scenario: Scenario, mode: SyncMode): SyncAction {
   switch (mode) {
-    case "download":
-    case "mirror":
+    case "cloud-first":
       // 云端优先
       if (scenario === "remote-deleted-local-changed") return "delete-local"; // 云端已删→本地也删
       return "update-local"; // both-changed / local-deleted-remote-changed → 取云端
-    case "upload":
+    case "local-first":
       // 本地优先
       if (scenario === "local-deleted-remote-changed") return "delete-remote"; // 本地已删→云端也删
       return "update-remote"; // both-changed / remote-deleted-local-changed → 取本地

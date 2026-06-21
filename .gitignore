@@ -13,3 +13,6 @@ tmp-test-output/
 
 # 本地开发
 NOTES.dev.md
+
+# AI 工具
+.codebuddy/

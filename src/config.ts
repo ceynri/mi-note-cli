@@ -16,7 +16,7 @@ const CONFIG_FILENAME = "config.json";
 const STATE_FILENAME = ".mi-note-cli.state.json";
 /** 默认 output 目录名（位于 .mi-note-cli/ 下，零配置时使用） */
 const DEFAULT_OUTPUT_SUBDIR = "output";
-const DEFAULT_MODE: SyncMode = "manual";
+const DEFAULT_SYNC_MODE: SyncMode = "manual";
 
 // ============================================================
 // 路径解析
@@ -64,7 +64,7 @@ function emptyUserConfig(): UserConfig {
  * 读取项目用户配置（不存在则返回空壳；不读旧 .mi-note-cli.json 兼容）。
  *
  * 回落形态：返回 `{}`（全字段 undefined）。消费者通过 `??` 链回落到默认值；
- * 显式 mode/output/fileNameTemplate 白名单也防止旧字段（如 lastSync/notes）误漂进 UserConfig。
+ * 显式 syncMode/output/fileNameTemplate 白名单也防止旧字段（如 lastSync/notes）误漂进 UserConfig。
  * 与 `loadState` 的容错风格刻意不同：state 由工具自动写入，schema 漂移可控。
  */
 export async function loadUserConfig(): Promise<UserConfig> {
@@ -74,7 +74,7 @@ export async function loadUserConfig(): Promise<UserConfig> {
     const raw = await readFile(file, "utf-8");
     const parsed = JSON.parse(raw) as Partial<UserConfig>;
     return {
-      mode: parsed.mode,
+      syncMode: parsed.syncMode,
       output: parsed.output,
       fileNameTemplate: parsed.fileNameTemplate,
     };
@@ -159,16 +159,16 @@ export async function resolveOutputDir(cliOutput?: string): Promise<string> {
 }
 
 /** 解析生效的同步模式：CLI > 用户配置 > 默认 */
-export async function resolveMode(cliMode?: SyncMode): Promise<SyncMode> {
+export async function resolveSyncMode(cliMode?: SyncMode): Promise<SyncMode> {
   if (cliMode) return cliMode;
   const cfg = await loadUserConfig();
-  return cfg.mode ?? DEFAULT_MODE;
+  return cfg.syncMode ?? DEFAULT_SYNC_MODE;
 }
 
 /** 设置默认同步模式（写入用户配置） */
-export async function setMode(mode: SyncMode): Promise<void> {
+export async function setSyncMode(mode: SyncMode): Promise<void> {
   const cfg = await loadUserConfig();
-  cfg.mode = mode;
+  cfg.syncMode = mode;
   await saveUserConfig(cfg);
 }
 
@@ -180,11 +180,10 @@ export async function setOutput(output: string): Promise<void> {
 }
 
 export const ALL_MODES: SyncMode[] = [
-  "download",
-  "mirror",
-  "upload",
+  "cloud-first",
+  "local-first",
   "two-way",
   "manual",
 ];
 
-export { DEFAULT_MODE };
+export { DEFAULT_SYNC_MODE };

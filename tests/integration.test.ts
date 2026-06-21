@@ -341,14 +341,14 @@ test("集成：sync 本地新增 .md 文件应上行创建云端", async (t) => 
     const marker = `${PREFIX} 本地新增 ${Date.now()}`;
     await writeFile(join(outDir, "新笔记.md"), `# ${marker}\n\n本地直接创建的内容`, "utf-8");
 
-    // upload 模式：本地新增应被检测为 local-new 并 create-remote
-    const { plan, state, folders } = await buildSyncPlan(client!, outDir, "upload", true);
+    // local-first 模式：本地新增应被检测为 local-new 并 create-remote
+    const { plan, state, folders } = await buildSyncPlan(client!, outDir, "local-first", true);
     const item = plan.find((p) => p.localMarkdown?.includes(marker));
     assert.ok(item, "应检测到本地新增文件");
     assert.equal(item!.scenario, "local-new", "应分类为本地新增");
-    assert.equal(item!.action, "create-remote", "upload 模式应上行创建云端");
+    assert.equal(item!.action, "create-remote", "local-first 模式应上行创建云端");
 
-    await executeSyncPlan(client!, outDir, "upload", plan, state, folders, { quiet: true });
+    await executeSyncPlan(client!, outDir, "local-first", plan, state, folders, { quiet: true });
 
     // 校验云端确实新建了这条笔记
     const { entries } = await client!.getAllNotes();

@@ -14,8 +14,8 @@ import {
   loadState,
   saveState,
   resolveOutputDir,
-  resolveMode,
-  setMode,
+  resolveSyncMode,
+  setSyncMode,
   setOutput,
   toOutputRel,
   toOutputAbs,
@@ -87,7 +87,7 @@ test("toOutputAbs 接受绝对路径直接返回", () => {
 
 test("loadUserConfig：文件不存在返回空配置", async () => {
   const cfg = await loadUserConfig();
-  assert.equal(cfg.mode, undefined);
+  assert.equal(cfg.syncMode, undefined);
   assert.equal(cfg.output, undefined);
   assert.equal(cfg.fileNameTemplate, undefined);
 });
@@ -97,28 +97,28 @@ test("loadUserConfig：JSON 解析失败时静默回落空对象（不抛错）"
   await saveUserConfig({});
   await writeFile(getUserConfigPath(), "{not valid json", "utf-8");
   const cfg = await loadUserConfig();
-  assert.equal(cfg.mode, undefined);
+  assert.equal(cfg.syncMode, undefined);
   assert.equal(cfg.output, undefined);
   assert.equal(cfg.fileNameTemplate, undefined);
 });
 
 test("saveUserConfig → loadUserConfig 往返保留所有字段", async () => {
   await saveUserConfig({
-    mode: "two-way",
+    syncMode: "two-way",
     output: "./mi-notes",
     fileNameTemplate: "${YYYY}-${MM}-${DD}",
   });
   const cfg = await loadUserConfig();
-  assert.equal(cfg.mode, "two-way");
+  assert.equal(cfg.syncMode, "two-way");
   assert.equal(cfg.output, "./mi-notes");
   assert.equal(cfg.fileNameTemplate, "${YYYY}-${MM}-${DD}");
 });
 
 test("saveUserConfig 自动建出 .mi-note-cli/ 父目录", async () => {
-  await saveUserConfig({ mode: "manual" });
+  await saveUserConfig({ syncMode: "manual" });
   assert.ok(await fileExists(getUserConfigPath()), "config.json 应已落盘");
   const raw = await readFile(getUserConfigPath(), "utf-8");
-  assert.match(raw, /"mode": "manual"/);
+  assert.match(raw, /"syncMode": "manual"/);
 });
 
 // ============ SyncState 读写 ============
@@ -195,33 +195,33 @@ test("resolveOutputDir：UserConfig 中绝对路径直接返回", async () => {
   assert.equal(await resolveOutputDir(), abs);
 });
 
-test("resolveMode 优先级：CLI > UserConfig.mode > 默认 manual", async () => {
+test("resolveSyncMode 优先级：CLI > UserConfig.syncMode > 默认 manual", async () => {
   // 1) 全空 → manual
-  assert.equal(await resolveMode(), "manual");
+  assert.equal(await resolveSyncMode(), "manual");
 
   // 2) UserConfig
-  await saveUserConfig({ mode: "two-way" });
-  assert.equal(await resolveMode(), "two-way");
+  await saveUserConfig({ syncMode: "two-way" });
+  assert.equal(await resolveSyncMode(), "two-way");
 
   // 3) CLI 覆盖
-  assert.equal(await resolveMode("upload"), "upload");
+  assert.equal(await resolveSyncMode("local-first"), "local-first");
 });
 
-// ============ setMode / setOutput 写入 ============
+// ============ setSyncMode / setOutput 写入 ============
 
-test("setMode 写入 UserConfig 且不影响其他字段", async () => {
+test("setSyncMode 写入 UserConfig 且不影响其他字段", async () => {
   await saveUserConfig({ output: "./keep", fileNameTemplate: "${id}" });
-  await setMode("download");
+  await setSyncMode("cloud-first");
   const cfg = await loadUserConfig();
-  assert.equal(cfg.mode, "download");
+  assert.equal(cfg.syncMode, "cloud-first");
   assert.equal(cfg.output, "./keep", "output 字段应保留");
   assert.equal(cfg.fileNameTemplate, "${id}", "template 应保留");
 });
 
 test("setOutput 写入 UserConfig 且不影响其他字段", async () => {
-  await saveUserConfig({ mode: "mirror" });
+  await saveUserConfig({ syncMode: "cloud-first" });
   await setOutput("./new-out");
   const cfg = await loadUserConfig();
   assert.equal(cfg.output, "./new-out");
-  assert.equal(cfg.mode, "mirror", "mode 字段应保留");
+  assert.equal(cfg.syncMode, "cloud-first", "syncMode 字段应保留");
 });

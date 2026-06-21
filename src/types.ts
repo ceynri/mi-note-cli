@@ -214,7 +214,7 @@ export interface AuthInfo {
 // ============ 同步状态与配置 ============
 
 /** 同步模式 */
-export type SyncMode = "download" | "mirror" | "upload" | "two-way" | "manual";
+export type SyncMode = "cloud-first" | "local-first" | "two-way" | "manual";
 
 /**
  * 单条笔记的同步基线记录（支撑 3-way diff）。
@@ -240,12 +240,12 @@ export interface SyncNoteState {
  * 用户配置（项目根 `.mi-note-cli/config.json`）。
  *
  * 用户手写、可入版控、可团队共享。所有字段均可选；缺省时各命令使用内置默认值。
- * - mode：默认同步模式（缺省回落到 manual）
+ * - syncMode：默认同步模式（缺省回落到 manual）
  * - output：默认同步/导出目录（CLI `-o` 优先；都缺省时落到 `<root>/.mi-note-cli/output/`）
  * - fileNameTemplate：见下方文档
  */
 export interface UserConfig {
-  mode?: SyncMode;
+  syncMode?: SyncMode;
   output?: string;
   /**
    * 同步落盘文件名模板（不含 `.md` 后缀）。

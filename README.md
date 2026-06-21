@@ -6,6 +6,8 @@
 
 > 从旧的 mi-note-export 迁移？见 [MIGRATION.md](./MIGRATION.md)。
 
+> ⚠️ **实验阶段**：本项目仍在快速迭代中，minor 版本（`x.Y.z`）的更新就可能包含破坏性变更。如果你追求稳定性，请将依赖锁定到 minor 版本（如 `~0.1.0` 而非 `^0.1.0`）。升级后出现问题时，可查看最新 [Releases](https://github.com/ceynri/mi-note-cli/releases) 的更新说明，确认是已知变更后提 [issue](https://github.com/ceynri/mi-note-cli/issues)。
+
 ## 功能
 
 - **认证**：浏览器交互式登录，Cookie 缓存
@@ -81,13 +83,12 @@ mi-note-cli sync -o ./notes --mode two-way            # 5. 与本地双向同步
 
 | 模式 | 行为 |
 |---|---|
-| `download` | 云端优先：一切以云端为准，覆盖本地，不上行本地变更 |
-| `mirror` | 本地镜像：云→本地下行，本地变更只检测不上行 |
-| `upload` | 本地优先：一切以本地为准上行到云端 |
+| `cloud-first` | 云端优先：仅下行，冲突以云端为准 |
+| `local-first` | 本地优先：仅上行，冲突以本地为准 |
 | `two-way` | 双向自动：单边改自动同步，真冲突才停下询问 |
 | `manual`（默认） | 交互：任何不一致都列出并逐条询问 |
 
-冲突（双改 / 一端删另一端改）处理：`download/mirror/upload` 已声明优先方，自动解决；`two-way/manual` 交互询问，非交互环境跳过并报告，**绝不擅自删数据**。
+冲突（双改 / 一端删另一端改）处理：`cloud-first`/`local-first` 已声明优先方，自动解决；`two-way`/`manual` 交互询问，非交互环境跳过并报告，**绝不擅自删数据**。
 
 用 `sync init` 交互设置默认模式，之后 `sync` 可省略 `--mode`。`sync --dry-run` 只预览不执行。
 
@@ -115,13 +116,13 @@ mi-note-cli create --title "带图" --content "看图：
 
 ```json
 {
-  "mode": "mirror",
+  "syncMode": "cloud-first",
   "output": "./mi-notes",
   "fileNameTemplate": "${YYYY}-${MM}-${DD}_${HH}-${mm}-${ss}[_${title}]"
 }
 ```
 
-- `mode`：默认同步模式，`sync` 不传 `--mode` 时使用
+- `syncMode`：默认同步模式，`sync` 不传 `--mode` 时使用
 - `output`：默认同步/导出目录，`sync` / `export` 不传 `-o` 时使用（相对路径基于项目根）
 - `fileNameTemplate`：控制 `sync` / `export` 落盘时的文件名格式（不含 `.md` 后缀）
 
@@ -177,7 +178,7 @@ ${YYYY}-${MM}-${DD}[_${title}]
 
 **当前不支持**：表格、脚注、定义列表、围栏代码块语言标识、Setext 风格标题（`===` / `---`）、`<u>` 之外的内嵌 HTML。这些语法在转换时会被悄悄丢弃或保留为字面文本。
 
-**双向同步注意**：本工具的 3-way diff 在 Markdown 空间比对，若转换不无损会被识别为「云端单边改了」并触发覆盖。如果你重度依赖不在上面白名单的语法、或观察到本地 markdown 风格在同步后被改写，建议优先用 `manual` / `two-way` 模式（遇到分歧会停下询问），不要默认 `mirror`。
+**双向同步注意**：本工具的 3-way diff 在 Markdown 空间比对，若转换不无损会被识别为「云端单边改了」并触发覆盖。如果你重度依赖不在上面白名单的语法、或观察到本地 markdown 风格在同步后被改写，建议优先用 `manual` / `two-way` 模式（遇到分歧会停下询问），不要默认 `cloud-first`。
 
 ---
 

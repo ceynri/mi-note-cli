@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { classify, decide } from "../src/sync-diff.ts";
 import type { Scenario, SyncAction } from "../src/sync-diff.ts";
+import { ALL_MODES } from "../src/config.ts";
 import type { SyncMode } from "../src/types.ts";
 
 // ============ classify：3-way 场景判定 ============
@@ -88,57 +89,55 @@ test("classify #11 两端都删", () => {
 
 // ============ decide：场景 × mode → 动作 ============
 
-const MODES: SyncMode[] = ["download", "mirror", "upload", "two-way", "manual"];
-
-/** 期望动作表：每个场景在 5 个 mode 下的动作 */
+/** 期望动作表：每个场景在 4 个 mode 下的动作 */
 const EXPECT: Record<Scenario, Record<SyncMode, SyncAction>> = {
   "in-sync": {
-    download: "skip", mirror: "skip", upload: "skip", "two-way": "skip", manual: "skip",
+    "cloud-first": "skip", "local-first": "skip", "two-way": "skip", manual: "skip",
   },
   "remote-changed": {
-    download: "update-local", mirror: "update-local", upload: "skip",
+    "cloud-first": "update-local", "local-first": "skip",
     "two-way": "update-local", manual: "update-local",
   },
   "local-changed": {
-    download: "skip", mirror: "skip", upload: "update-remote",
+    "cloud-first": "skip", "local-first": "update-remote",
     "two-way": "update-remote", manual: "conflict",
   },
   "remote-new": {
-    download: "create-local", mirror: "create-local", upload: "skip",
+    "cloud-first": "create-local", "local-first": "skip",
     "two-way": "create-local", manual: "create-local",
   },
   "local-new": {
-    download: "skip", mirror: "skip", upload: "create-remote",
+    "cloud-first": "skip", "local-first": "create-remote",
     "two-way": "create-remote", manual: "conflict",
   },
   "remote-deleted-local-clean": {
-    download: "delete-local", mirror: "delete-local", upload: "create-remote",
+    "cloud-first": "delete-local", "local-first": "create-remote",
     "two-way": "delete-local", manual: "conflict",
   },
   "local-deleted-remote-clean": {
-    download: "create-local", mirror: "create-local", upload: "delete-remote",
+    "cloud-first": "create-local", "local-first": "delete-remote",
     "two-way": "delete-remote", manual: "conflict",
   },
   "both-deleted": {
-    download: "drop-state", mirror: "drop-state", upload: "drop-state",
+    "cloud-first": "drop-state", "local-first": "drop-state",
     "two-way": "drop-state", manual: "drop-state",
   },
   "both-changed": {
-    download: "update-local", mirror: "update-local", upload: "update-remote",
+    "cloud-first": "update-local", "local-first": "update-remote",
     "two-way": "conflict", manual: "conflict",
   },
   "remote-deleted-local-changed": {
-    download: "delete-local", mirror: "delete-local", upload: "update-remote",
+    "cloud-first": "delete-local", "local-first": "update-remote",
     "two-way": "conflict", manual: "conflict",
   },
   "local-deleted-remote-changed": {
-    download: "update-local", mirror: "update-local", upload: "delete-remote",
+    "cloud-first": "update-local", "local-first": "delete-remote",
     "two-way": "conflict", manual: "conflict",
   },
 };
 
 for (const scenario of Object.keys(EXPECT) as Scenario[]) {
-  for (const mode of MODES) {
+  for (const mode of ALL_MODES) {
     test(`decide: ${scenario} × ${mode} → ${EXPECT[scenario][mode]}`, () => {
       assert.equal(decide(scenario, mode), EXPECT[scenario][mode]);
     });
@@ -159,10 +158,9 @@ test("性质：two-way 模式下真冲突返回 conflict（不自动猜）", () 
   }
 });
 
-test("性质：download/mirror 永不上行（不产生 update-remote/create-remote/delete-remote）", () => {
+test("性质：cloud-first 永不上行（不产生 update-remote/create-remote/delete-remote）", () => {
   const uplink: SyncAction[] = ["update-remote", "create-remote", "delete-remote"];
   for (const s of Object.keys(EXPECT) as Scenario[]) {
-    assert.ok(!uplink.includes(decide(s, "download")), `download 不应上行: ${s}`);
-    assert.ok(!uplink.includes(decide(s, "mirror")), `mirror 不应上行: ${s}`);
+    assert.ok(!uplink.includes(decide(s, "cloud-first")), `cloud-first 不应上行: ${s}`);
   }
 });

@@ -84,13 +84,12 @@ npx mi-note-cli sync status --json                   # 查看配置与各目录�
 ```
 
 模式 `--mode`：
-- `download` 云端优先（覆盖本地，不上行）
-- `mirror` 本地镜像（只下行，本地变更不上行）
-- `upload` 本地优先（上行覆盖云端）
+- `cloud-first` 云端优先（仅下行，冲突以云端为准）
+- `local-first` 本地优先（仅上行，冲突以本地为准）
 - `two-way` 双向自动（真冲突才停）
 - `manual`（默认）任何不一致都逐条询问
 
-基于「上次同步基线 / 云端现状 / 本地现状」三方对比。冲突时：有优先方的模式自动解决；`two-way/manual` 在非交互环境**跳过并报告，绝不擅自删数据**（需交互或 `-y`）。
+基于「上次同步基线 / 云端现状 / 本地现状」三方对比。冲突时：有优先方的模式自动解决；`two-way`/`manual` 在非交互环境**跳过并报告，绝不擅自删数据**（需交互或 `-y`）。
 
 遇到其他场景，优先 `npx mi-note-cli <command> --help` 查阅选项（--help 含输出约定、模式说明、示例）。
 
@@ -111,7 +110,7 @@ npx mi-note-cli sync status --json                   # 查看配置与各目录�
 ## 运行时数据
 
 - 登录态缓存：`~/Library/Caches/mi-note-cli/`（`cookie` + `browser-data/`）
-- 用户配置：项目根 `.mi-note-cli/config.json`，存 `mode` / `output` / `fileNameTemplate` 等用户偏好；可入版控、团队共享
+- 用户配置：项目根 `.mi-note-cli/config.json`，存 `syncMode` / `output` / `fileNameTemplate` 等用户偏好；可入版控、团队共享
 - 默认 output：用户配置和 CLI `-o` 都缺省时落到 `.mi-note-cli/output/`
 - 同步状态：`<output>/.mi-note-cli.state.json`，存同步基线（笔记内容哈希、`filePath`、上次同步云端 modify）；自动生成、跟 output 1:1 绑定、不入版控
 
@@ -121,3 +120,7 @@ npx mi-note-cli sync status --json                   # 查看配置与各目录�
 - 私密笔记 / 待办独立类型 / 思维导图：无稳定写接口，导出尽力转换，不支持编辑
 - 用户标签：小米笔记无用户标签体系
 - Cookie：短效 serviceToken 过期会自动用持久化的长效登录态静默续期，通常无需重新 login；仅长效登录态也失效时才需重新 `login`
+
+---
+
+> ⚠️ 如果 CLI 实际行为与本文档有明显差异，说明 skill 版本已落后于 CLI 更新。执行 `npx skills update mi-note-cli` 更新到最新版本，或先通过 `npx mi-note-cli <command> --help` 确认当前行为。

@@ -213,7 +213,7 @@ const sync = program
   .command("sync")
   .description("双向同步本地与云端（3-way 差异 + 模式策略）")
   .option("-o, --output <dir>", "同步目录（缺省时取用户配置的 output；再缺省为 .mi-note-cli/output/）")
-  .option("-m, --mode <mode>", "同步模式：download/mirror/upload/two-way/manual")
+  .option("-m, --mode <mode>", "同步模式：cloud-first/local-first/two-way/manual")
   .option("--dry-run", "只列出同步计划，不实际执行")
   .option("-y, --yes", "跳过交互询问（非交互按模式处理，真冲突跳过）")
   .action((opts) => syncCommand(opts))
@@ -221,14 +221,13 @@ const sync = program
     "after",
     `
 同步模式 (--mode，未指定时取 sync init 设的默认值，再缺省为 manual):
-  download  云端优先：一切以云端为准，覆盖本地，不上行本地变更
-  mirror    本地镜像：云→本地下行，本地变更只检测不上行（≈纯导出）
-  upload    本地优先：一切以本地为准上行到云端
-  two-way   双向自动：单边改自动同步，真冲突才停下询问
-  manual    交互（默认）：任何不一致都列出并逐条询问
+  cloud-first  云端优先：仅下行，冲突以云端为准
+  local-first   本地优先：仅上行，冲突以本地为准
+  two-way       双向自动：单边改自动同步，真冲突才停下询问
+  manual        交互（默认）：任何不一致都列出并逐条询问
 
 冲突处理:
-  download/mirror/upload 已声明优先方，冲突按优先方自动解决；
+  cloud-first/local-first 已声明优先方，冲突按优先方自动解决；
   two-way/manual 遇到「双改」「一端删另一端改」等真冲突会停下：交互式询问，
   非交互(--json/无 TTY)则跳过该条并在结果里报告，绝不擅自删数据。
 
