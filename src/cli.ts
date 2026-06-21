@@ -207,6 +207,14 @@ program
   .description("导出全部笔记为本地 Markdown（单向云→本地，永不修改云端）")
   .option("-o, --output <dir>", "输出目录（缺省时取用户配置的 output；再缺省为 .mi-note-cli/output/）")
   .option("-f, --force", "强制重新导出（忽略本地已有同名文件）")
+  .addHelpText(
+    "after",
+    `
+与 sync --mode cloud-first 的区别：
+  export 无状态文件、不删本地文件（云端删了本地保留）、支持 --force 全量重下。
+  适合一次性备份/快照；需要持续同步用 sync。
+`,
+  )
   .action((opts) => exportCommand(opts));
 
 const sync = program

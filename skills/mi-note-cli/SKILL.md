@@ -74,6 +74,8 @@ npx mi-note-cli export -f -o <dir>       # 强制重新导出
 
 export 只读云端、写本地，适合"只想备份"。本地内容相同则跳过；不回写云端。
 
+与 `sync --mode cloud-first` 的关键区别：export **无状态文件**（不创建 `.mi-note-cli.state.json`）、**不删本地文件**（云端删了本地保留）、支持 `--force` 全量重下。需要持续同步用 `sync`，需要一次性快照用 `export`。
+
 ### 同步（双向）
 
 ```bash

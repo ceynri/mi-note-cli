@@ -76,8 +76,15 @@ All commands support the global `--json` flag, producing `{ ok, data }` / `{ ok:
 
 ## Export vs Sync
 
-- **`export`**: one-way cloud → local snapshot, **never modifies the cloud**. For "I just want backups". Local edits are not pushed back.
-- **`sync`**: bidirectional, based on a 3-way comparison (last-sync base / current remote / current local), resolving diffs and conflicts per mode.
+| | `export` | `sync --mode cloud-first` |
+|---|---|---|
+| Direction | Cloud → local only | Can be bidirectional (cloud-first = download only) |
+| State file | None, pure download | Creates `.mi-note-cli.state.json` to track baseline |
+| Deletes local files | No (local files persist even if deleted on cloud) | Yes (cloud is authoritative, removes local files for deleted notes) |
+| Full re-download | `--force` | Delete the output dir and re-run |
+| Use case | One-time backup / snapshot | Ongoing sync |
+
+Other `sync` modes: `local-first` (upload only), `two-way` (auto bidirectional), `manual` (default, interactive per-item).
 
 ### Sync modes (`--mode`)
 
