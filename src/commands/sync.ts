@@ -10,12 +10,22 @@ import {
   setSyncMode,
   loadUserConfig,
   loadState,
+  saveState,
   getUserConfigPath,
   getStatePath,
   ALL_MODES,
 } from "../config.js";
-import { isJsonMode, success, logInfo, fail } from "../output.js";
+import {
+  isJsonMode,
+  success,
+  logInfo,
+  fail,
+  prompt,
+  EXIT_PARTIAL_FAILURE,
+} from "../output.js";
 import { createInterface } from "node:readline";
+import { actionForSide } from "../sync-diff.js";
+import { diffLines, formatDiff } from "../text-diff.js";
 import type { SyncMode } from "../types.js";
 import type { SyncAction } from "../sync-diff.js";
 
@@ -44,6 +54,19 @@ const SCENARIO_DESC: Record<string, string> = {
   "local-deleted-remote-clean": "本地已删除",
 };
 
+/** 动作的人类可读说明（冲突询问时展示每个选项的实际后果） */
+const ACTION_DESC: Record<SyncAction, string> = {
+  skip: "不做处理",
+  "update-local": "用云端内容覆盖本地文件",
+  "update-remote": "用本地内容覆盖云端笔记",
+  "create-local": "从云端重新生成本地文件",
+  "create-remote": "在云端新建笔记",
+  "delete-local": "删除本地文件",
+  "delete-remote": "把云端笔记移到回收站",
+  "drop-state": "清理同步记录",
+  conflict: "待定",
+};
+
 /** sync 主命令 */
 export async function syncCommand(opts: SyncOptions): Promise<void> {
   try {
@@ -59,7 +82,7 @@ export async function syncCommand(opts: SyncOptions): Promise<void> {
     const client = await getClient();
     logInfo(`🔁 同步模式：${mode}（${MODE_DESC[mode]}）`);
 
-    const { plan, state, folders } = await buildSyncPlan(
+    const { plan, state, folders, stateChanged } = await buildSyncPlan(
       client,
       outputDir,
       mode,
@@ -67,6 +90,11 @@ export async function syncCommand(opts: SyncOptions): Promise<void> {
     );
 
     if (plan.length === 0) {
+      // 首次同步认领了已有本地文件等情况：虽无动作，但基线需要落盘
+      if (stateChanged && !opts.dryRun) {
+        state.lastSync = Date.now();
+        await saveState(outputDir, state);
+      }
       success({ outputDir, mode, changes: 0 }, () => {
         logInfo("✅ 已是最新，无需同步");
       });
@@ -109,7 +137,14 @@ export async function syncCommand(opts: SyncOptions): Promise<void> {
         }
         logInfo("  可在交互式终端重跑 sync 逐条处理，或指定 --mode 决定优先方。");
       }
+      if (result.errors.length > 0) {
+        logInfo(`\n❌ ${result.errors.length} 条处理失败：`);
+        for (const e of result.errors) {
+          logInfo(`  [${e.id}] ${e.subject} — ${e.action}: ${e.error}`);
+        }
+      }
     });
+    if (result.errors.length > 0) process.exitCode = EXIT_PARTIAL_FAILURE;
   } catch (err) {
     fail(err);
   }
@@ -191,37 +226,30 @@ function planSummary(plan: SyncPlanItem[]) {
 /** 构造交互式冲突解决器 */
 function makeInteractiveResolver() {
   return async (item: SyncPlanItem): Promise<SyncAction> => {
+    const localAction = actionForSide(item.scenario, "local");
+    const remoteAction = actionForSide(item.scenario, "remote");
     logInfo(`\n⚠️  冲突 [${item.id}] ${item.subject}：${describe(item)}`);
     logInfo("  选择处理方式：");
-    logInfo("  (l) 以本地为准（上行覆盖云端）");
-    logInfo("  (r) 以云端为准（下行覆盖本地）");
+    logInfo(`  (l) 以本地为准：${ACTION_DESC[localAction]}`);
+    logInfo(`  (r) 以云端为准：${ACTION_DESC[remoteAction]}`);
+    logInfo("  (d) 查看差异");
     logInfo("  (s) 跳过");
-    const ans = (await confirmChoice("  你的选择 [l/r/s，默认 s]: ")).toLowerCase();
-    if (ans === "l") {
-      return item.scenario === "local-deleted-remote-changed"
-        ? "delete-remote"
-        : "update-remote";
+    while (true) {
+      const ans = (await prompt("  你的选择 [l/r/d/s，默认 s]: ")).toLowerCase();
+      if (ans === "d") {
+        logInfo(renderConflictDiff(item));
+        continue;
+      }
+      if (ans === "l") return localAction;
+      if (ans === "r") return remoteAction;
+      return "skip";
     }
-    if (ans === "r") {
-      return item.scenario === "remote-deleted-local-changed"
-        ? "delete-local"
-        : "update-local";
-    }
-    return "skip";
   };
 }
 
-/** 读取单行选择（复用 stdin） */
-function confirmChoice(question: string): Promise<string> {
-  return new Promise((resolve) => {
-    process.stderr.write(question);
-    const onData = (data: string): void => {
-      process.stdin.pause();
-      process.stdin.off("data", onData);
-      resolve(data.trim());
-    };
-    process.stdin.resume();
-    process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", onData);
-  });
+function renderConflictDiff(item: SyncPlanItem): string {
+  const header = "  --- 云端\n  +++ 本地";
+  if (item.remoteMarkdown === undefined) return `${header}\n  （云端不存在，本地内容如下）\n${item.localMarkdown ?? ""}`;
+  if (item.localMarkdown === undefined) return `${header}\n  （本地不存在，云端内容如下）\n${item.remoteMarkdown}`;
+  return `${header}\n${formatDiff(diffLines(item.remoteMarkdown, item.localMarkdown))}`;
 }

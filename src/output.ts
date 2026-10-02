@@ -58,8 +58,8 @@ export function fail(error: unknown): never {
   process.exit(1);
 }
 
-/** 命令行 y/N 确认提示（问题走 stderr，不污染 stdout） */
-export function confirm(question: string): Promise<boolean> {
+/** 读取一行用户输入（问题走 stderr，不污染 stdout） */
+export function prompt(question: string): Promise<string> {
   return new Promise((resolve) => {
     process.stderr.write(question);
     const stdin = process.stdin;
@@ -67,12 +67,23 @@ export function confirm(question: string): Promise<boolean> {
     const onData = (data: string) => {
       stdin.pause();
       stdin.off("data", onData);
-      resolve(data.trim().toLowerCase() === "y");
+      resolve(data.trim());
     };
     stdin.resume();
     stdin.on("data", onData);
   });
 }
+
+/** 命令行 y/N 确认提示 */
+export async function confirm(question: string): Promise<boolean> {
+  return (await prompt(question)).toLowerCase() === "y";
+}
+
+/**
+ * 部分条目失败时的退出码：结果仍按 ok:true 输出（data.errors 列出失败项），
+ * 但以非零码退出，便于脚本用 `&&` / `$?` 感知。整体失败走 fail()，退出码为 1。
+ */
+export const EXIT_PARTIAL_FAILURE = 2;
 
 /**
  * 从 stdin 读取全部输入（用于 create/update 从管道接收内容）。

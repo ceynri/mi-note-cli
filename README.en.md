@@ -79,7 +79,7 @@ All commands support the global `--json` flag, producing `{ ok, data }` / `{ ok:
 | | `export` | `sync --mode cloud-first` |
 |---|---|---|
 | Direction | Cloud → local only | Can be bidirectional (cloud-first = download only) |
-| State file | None, pure download | Creates `.mi-note-cli.state.json` to track baseline |
+| State file | None (incremental cache lives in the global cache dir, safe to delete) | Creates `.mi-note-cli.state.json` to track baseline |
 | Deletes local files | No (local files persist even if deleted on cloud) | Yes (cloud is authoritative, removes local files for deleted notes) |
 | Full re-download | `--force` | Delete the output dir and re-run |
 | Use case | One-time backup / snapshot | Ongoing sync |
@@ -98,6 +98,16 @@ Other `sync` modes: `local-first` (upload only), `two-way` (auto bidirectional),
 Conflicts (both-changed / one-side-deleted-other-changed): `cloud-first`/`local-first` resolve automatically by their declared winner; `two-way`/`manual` ask interactively, or in non-interactive contexts skip and report — **never deleting data on their own**.
 
 Use `sync init` to set a default mode interactively; then `sync` can omit `--mode`. `sync --dry-run` previews without executing.
+
+Data-safety rules during sync:
+
+- **Same-named notes never overwrite each other**: when several notes map to the same file name in a folder, one keeps the name and the rest get an `_<noteId>` suffix (`export` always lets the earliest-created note keep the plain name).
+- **Existing files are adopted first**: the first `sync` over a directory that already has Markdown files (e.g. from `export`) treats a file at a note's target path as that note — identical content is recorded as in sync, differing content becomes a conflict; nothing is uploaded twice.
+- **Deletions go to the recycle bin**: deleting a local file moves the cloud note to the recycle bin (restorable on the web for 30 days); sync never purges.
+- **Attachments are never corrupted**: image references in local notes are restored to the original images on upload; references to local image files are uploaded automatically. An image inline with text, a missing file, or audio/video attachments make that item fail and get skipped instead of turning attachments into plain text.
+- **Local subdirectories map to cloud folders**: new files in a subdirectory are created in the cloud folder with the same name, which is created if missing; the file name becomes the cloud title.
+- **Stale plans are not applied**: if either side changes after the plan is built (e.g. while you answer a prompt), that item is skipped and you're asked to re-run sync.
+- When resolving a conflict interactively, press `d` to see the cloud vs. local diff.
 
 ## Embedding Images
 
@@ -206,6 +216,7 @@ The project is in early stages — for any conversion oddities, missing features
 1. Always pass `--json` for parseable output.
 2. In non-interactive contexts (no TTY), an unauthenticated call fails immediately instead of hanging on browser login — have a human run `login` once first.
 3. For destructive actions pass `-y`; in non-interactive sync, real conflicts are skipped without touching data.
+4. When some items of `export` / `sync` fail, the output is still `ok: true` with the failures listed in `data.errors`, and the process exits with code 2. Only a total failure yields `ok: false` and exit code 1.
 
 ---
 

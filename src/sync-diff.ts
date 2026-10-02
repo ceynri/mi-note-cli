@@ -159,16 +159,45 @@ export function decide(scenario: Scenario, mode: SyncMode): SyncAction {
 function resolveConflict(scenario: Scenario, mode: SyncMode): SyncAction {
   switch (mode) {
     case "cloud-first":
-      // 云端优先
-      if (scenario === "remote-deleted-local-changed") return "delete-local"; // 云端已删→本地也删
-      return "update-local"; // both-changed / local-deleted-remote-changed → 取云端
+      return actionForSide(scenario, "remote");
     case "local-first":
-      // 本地优先
-      if (scenario === "local-deleted-remote-changed") return "delete-remote"; // 本地已删→云端也删
-      return "update-remote"; // both-changed / remote-deleted-local-changed → 取本地
+      return actionForSide(scenario, "local");
     case "two-way":
     case "manual":
     default:
       return "conflict"; // 交由调用方：交互询问或非交互跳过报告
   }
+}
+
+const LOCAL_WINS: Partial<Record<Scenario, SyncAction>> = {
+  "local-changed": "update-remote",
+  "both-changed": "update-remote",
+  "local-new": "create-remote",
+  // 云端已删：本地为准只能在云端重建
+  "remote-deleted-local-clean": "create-remote",
+  "remote-deleted-local-changed": "create-remote",
+  "local-deleted-remote-clean": "delete-remote",
+  "local-deleted-remote-changed": "delete-remote",
+};
+
+const REMOTE_WINS: Partial<Record<Scenario, SyncAction>> = {
+  "remote-changed": "update-local",
+  "both-changed": "update-local",
+  "remote-new": "create-local",
+  "local-deleted-remote-clean": "create-local",
+  "local-deleted-remote-changed": "update-local",
+  "remote-deleted-local-clean": "delete-local",
+  "remote-deleted-local-changed": "delete-local",
+};
+
+/**
+ * 以某一侧为准时该场景应执行的动作；该侧没有可传播的内容时返回 skip
+ * （例如本地新增文件「以云端为准」不删本地，只是不上传）。
+ */
+export function actionForSide(
+  scenario: Scenario,
+  side: "local" | "remote",
+): SyncAction {
+  const table = side === "local" ? LOCAL_WINS : REMOTE_WINS;
+  return table[scenario] ?? "skip";
 }

@@ -229,6 +229,8 @@ export interface SyncNoteState {
   id: string;
   subject: string;
   filePath: string | null;
+  /** 上次同步时笔记所在的云端文件夹 id（用于把本地同目录新文件建到同一文件夹） */
+  folderId?: string;
   baseHash?: string;
   localHash?: string;
   remoteModify?: number;

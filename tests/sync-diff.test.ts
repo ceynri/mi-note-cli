@@ -127,7 +127,7 @@ const EXPECT: Record<Scenario, Record<SyncMode, SyncAction>> = {
     "two-way": "conflict", manual: "conflict",
   },
   "remote-deleted-local-changed": {
-    "cloud-first": "delete-local", "local-first": "update-remote",
+    "cloud-first": "delete-local", "local-first": "create-remote",
     "two-way": "conflict", manual: "conflict",
   },
   "local-deleted-remote-changed": {
