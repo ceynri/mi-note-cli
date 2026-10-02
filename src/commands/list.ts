@@ -1,4 +1,4 @@
-import { getClient } from "./shared.js";
+import { getClient, parseLimit } from "./shared.js";
 import { deriveTitle, xmlToMarkdown, truncateDisplay } from "../converter.js";
 import { success, logInfo, fail } from "../output.js";
 import type { NoteListItem, RawNoteEntry } from "../types.js";
@@ -14,6 +14,7 @@ const TITLE_MAX_WIDTH = 60;
 /** 列出笔记 */
 export async function listCommand(opts: ListOptions): Promise<void> {
   try {
+    const limit = parseLimit(opts.limit, Infinity);
     const client = await getClient();
     const { entries, folders } = await client.getAllNotes(200, (count: number) => {
       process.stderr.write(`\r📋 已获取 ${count} 条笔记...`);
@@ -33,7 +34,6 @@ export async function listCommand(opts: ListOptions): Promise<void> {
         (b.modifyDate ?? 0) - (a.modifyDate ?? 0),
     );
 
-    const limit = opts.limit ? parseInt(opts.limit, 10) : filtered.length;
     const sliced = filtered.slice(0, limit);
 
     const items: NoteListItem[] = sliced.map((e: RawNoteEntry) => toListItem(e));
