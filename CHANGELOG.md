@@ -4,7 +4,9 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/)，版本号遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased] [[compare]](https://github.com/ceynri/mi-note-cli/compare/v0.3.1...HEAD)
+## [Unreleased] [[compare]](https://github.com/ceynri/mi-note-cli/compare/v0.4.0...HEAD)
+
+## [0.4.0] - 2026-10-02 [[compare]](https://github.com/ceynri/mi-note-cli/compare/v0.3.1...v0.4.0)
 
 ### Added
 
