@@ -701,6 +701,15 @@ test("renderFileNameTemplate: 未识别占位符原样保留", () => {
 // 文件级 round-trip：md → xml → md 字节相等（夹具守恒）
 // ============================================================
 
+test("markdownToXml: 文件末尾换行不生成多余空段落", () => {
+  assert.equal(markdownToXml("最后一段\n"), '<text indent="1">最后一段</text>');
+  assert.equal(markdownToXml("最后一段\n\n"), '<text indent="1">最后一段</text>');
+  assert.equal(
+    markdownToXml("上一段\n\n下一段\n"),
+    '<text indent="1">上一段</text>\n<text indent="1"></text>\n<text indent="1">下一段</text>',
+  );
+});
+
 test("round-trip: 综合夹具 md → xml → md 严格相等（trim 后）", () => {
   const md = readFileSync(join(FIXTURES_DIR, "round-trip.md"), "utf-8");
   const xml = markdownToXml(md);

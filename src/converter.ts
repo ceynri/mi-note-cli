@@ -579,6 +579,12 @@ export function markdownToXml(
     resetListStack();
   }
 
+  // 文末因文件换行产生的空段落：xmlToMarkdown 会 trim，小米云端也会丢掉。
+  // 不写进 XML，避免 round-trip 因末尾多一个 <text></text> 假失败。
+  while (out.length > 0 && out[out.length - 1] === '<text indent="1"></text>') {
+    out.pop();
+  }
+
   return out.join("\n");
 }
 
