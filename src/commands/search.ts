@@ -1,4 +1,4 @@
-import { getClient } from "./shared.js";
+import { getClient, parseLimit } from "./shared.js";
 import { deriveTitle, xmlToMarkdown } from "../converter.js";
 import { success, logInfo, fail } from "../output.js";
 import type { NoteListItem, RawNoteEntry } from "../types.js";
@@ -13,6 +13,7 @@ export async function searchCommand(
   opts: SearchOptions,
 ): Promise<void> {
   try {
+    const limit = parseLimit(opts.limit, 20);
     const client = await getClient();
     const { entries } = await client.getAllNotes(200, (count: number) => {
       process.stderr.write(`\r🔍 已检索 ${count} 条...`);
@@ -30,7 +31,6 @@ export async function searchCommand(
       (a: RawNoteEntry, b: RawNoteEntry) =>
         (b.modifyDate ?? 0) - (a.modifyDate ?? 0),
     );
-    const limit = opts.limit ? parseInt(opts.limit, 10) : 20;
     const sliced = matches.slice(0, limit);
 
     const items: NoteListItem[] = sliced.map((e: RawNoteEntry) => ({
