@@ -11,6 +11,9 @@ import {
   extractSnippet,
   truncateDisplay,
   renderFileNameTemplate,
+  buildImageMap,
+  findUnresolvedAttachments,
+  assertAttachmentsResolvable,
 } from "../src/converter.ts";
 import type { RawNoteEntry, ParsedNote } from "../src/types.ts";
 
@@ -704,4 +707,58 @@ test("round-trip: 综合夹具 md → xml → md 严格相等（trim 后）", ()
   const back = xmlToMarkdown(xml);
   // xmlToMarkdown 末尾 trim() 会去掉文件末尾换行，原文也 trim 后比对
   assert.equal(back.trim(), md.trim());
+});
+
+// ============ 上行附件守护 ============
+
+test("buildImageMap: assets 引用可还原为 <img>", () => {
+  const note = parseNoteEntry({
+    id: "1",
+    createDate: 1700000000000,
+    content: '<img fileid="1234.abcdEFG" imgshow="0" imgdes="" />',
+    setting: { data: [{ fileId: "1234.abcdEFG", mimeType: "image/jpeg" }] },
+  });
+  const md = xmlToMarkdown(note.content, note.files);
+  assert.equal(
+    markdownToXml(md, buildImageMap(note.files)),
+    '<img fileid="1234.abcdEFG" imgshow="0" imgdes="" />',
+  );
+});
+
+test("findUnresolvedAttachments: 识别会丢失的附件引用", () => {
+  const map = new Map([["assets/a.jpg", "id1"]]);
+  assert.deepEqual(findUnresolvedAttachments("![](assets/a.jpg)", map), []);
+  assert.deepEqual(findUnresolvedAttachments("![](minote://image/x)"), []);
+  assert.deepEqual(findUnresolvedAttachments("![](https://example.com/x.png)"), []);
+  assert.deepEqual(findUnresolvedAttachments("![](./new.png)", map), ["找不到图片文件或格式不支持：./new.png"]);
+  assert.deepEqual(findUnresolvedAttachments("看图 ![](assets/a.jpg)", map), [
+    "图片需独占一行：看图 ![](assets/a.jpg)",
+  ]);
+  assert.deepEqual(findUnresolvedAttachments("[🔊 a.mp3](assets/a.mp3)"), [
+    "暂不支持回写的附件：assets/a.mp3",
+  ]);
+  assert.deepEqual(findUnresolvedAttachments("[文档](https://example.com)"), []);
+});
+
+test("assertAttachmentsResolvable: 有问题时抛错并提示 upload-image", () => {
+  assert.throws(() => assertAttachmentsResolvable("![](./new.png)"), /new\.png/);
+  assert.doesNotThrow(() => assertAttachmentsResolvable("纯文本"));
+});
+
+test("xmlToMarkdown: 未登记附件的图片保留为 minote 引用并可往返", () => {
+  const xml = '<img fileid="1234.abcdEFG" imgshow="0" imgdes="" />';
+  const md = xmlToMarkdown(xml);
+  assert.equal(md, "![](minote://image/1234.abcdEFG)");
+  assert.equal(markdownToXml(md), xml);
+});
+
+test("buildImageMap: 支持多个前缀", () => {
+  const note = parseNoteEntry({
+    id: "1",
+    createDate: 1700000000000,
+    setting: { data: [{ fileId: "1234.abcdEFG", mimeType: "image/jpeg" }] },
+  });
+  const map = buildImageMap(note.files, "../assets/", "assets/");
+  assert.equal(map.size, 2);
+  for (const id of map.values()) assert.equal(id, "1234.abcdEFG");
 });

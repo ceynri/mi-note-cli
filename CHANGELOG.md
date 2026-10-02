@@ -6,10 +6,20 @@
 
 ## [Unreleased] [[compare]](https://github.com/ceynri/mi-note-cli/compare/v0.3.1...HEAD)
 
+### Added
+
+- 引用本地图片文件（`![](./photo.jpg)`）在 `create` / `update` 时自动上传，并登记为笔记附件，无需先运行 `upload-image`
+
 ### Changed
 
 - `--limit` 必须是正整数，非法值直接报错
 - 找不到可用浏览器时提示安装 Chrome 或运行 `npx playwright install chromium`
+- `create` / `update` 从 `--file` 读取内容时，相对图片路径基于该文件所在目录
+
+### Fixed
+
+- 本地修改带图笔记后同步上行，或 `get` → 修改 → `update` 时，图片被写成纯文本导致云端丢图；无法回写的附件引用现在会报错而不是静默丢失
+- 云端笔记 `setting.data` 里未登记附件的图片在导出时丢图；现在保留为 `minote://image/` 引用，仍可正常回写
 
 ### Security
 

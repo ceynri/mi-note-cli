@@ -129,7 +129,8 @@ program
   mi-note-cli create --title "标题" --content "# 正文\\n\\n- 列表项"
   echo "# 来自管道" | mi-note-cli create --title 管道笔记
   mi-note-cli create --file ./note.md --folder 123 --json
-  先用 upload-image 拿到 ![](minote://image/<fileId>)，放进 --content 即可插图。
+  插图：upload-image 后把 ![](minote://image/<fileId>) 放进内容；或直接写本地路径 ![](path.jpg) 自动上传。
+  --file 里的相对图片路径基于该文件所在目录；--content / 管道时基于当前目录。
 `,
   );
 

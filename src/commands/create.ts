@@ -1,5 +1,6 @@
-import { getClient, resolveContent } from "./shared.js";
+import { getClient, resolveContent, contentBaseDir } from "./shared.js";
 import { markdownToXml, extractSnippet } from "../converter.js";
+import { uploadLocalImages, withAttachments } from "../images.js";
 import { buildExtraInfoString } from "../note.js";
 import { success, logInfo, fail } from "../output.js";
 import type { WriteNoteEntry } from "../types.js";
@@ -31,8 +32,14 @@ export async function createCommand(opts: CreateOptions): Promise<void> {
     }
 
     const client = await getClient();
+    const { imageMap, uploaded } = await uploadLocalImages(
+      client,
+      content,
+      new Map(),
+      [contentBaseDir(opts)],
+    );
     const now = Date.now();
-    const xmlContent = markdownToXml(content);
+    const xmlContent = markdownToXml(content, imageMap);
 
     const entry: WriteNoteEntry = {
       colorId,
@@ -41,7 +48,7 @@ export async function createCommand(opts: CreateOptions): Promise<void> {
       modifyDate: now,
       content: xmlContent,
       alertDate: 0,
-      setting: { themeId: 0, stickyTime: 0, version: 0 },
+      setting: withAttachments(undefined, uploaded),
       extraInfo: buildExtraInfoString(opts.title),
       snippet: extractSnippet(xmlContent),
     };

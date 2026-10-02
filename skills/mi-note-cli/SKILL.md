@@ -65,6 +65,8 @@ npx mi-note-cli upload-image ./photo.png --json
 # 2. 把该 Markdown 放进 create/update 的 --content 中即可
 ```
 
+`get` / `sync` 输出里的图片引用可以原样保留交给 `update`，会还原为原图片；引用本地图片文件（相对路径基于 Markdown 文件所在目录）会自动上传，无需先调 `upload-image`。图片需独占一行。内容里有无法回写的附件（找不到的图片文件、音频/视频）时命令会报错，不会把附件写成纯文本。
+
 ### 导出（单向云→本地）
 
 ```bash
