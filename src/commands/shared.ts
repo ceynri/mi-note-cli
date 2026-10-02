@@ -46,3 +46,13 @@ export async function resolveContent(opts: {
   }
   return await readStdin();
 }
+
+/** 解析 --limit：必须是正整数；未提供时返回 fallback */
+export function parseLimit(raw: string | undefined, fallback: number): number {
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`--limit 必须是正整数，收到：${raw}`);
+  }
+  return n;
+}

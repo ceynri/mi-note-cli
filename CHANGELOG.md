@@ -6,6 +6,15 @@
 
 ## [Unreleased] [[compare]](https://github.com/ceynri/mi-note-cli/compare/v0.3.1...HEAD)
 
+### Changed
+
+- `--limit` 必须是正整数，非法值直接报错
+- 找不到可用浏览器时提示安装 Chrome 或运行 `npx playwright install chromium`
+
+### Security
+
+- cookie 缓存文件权限收紧为仅当前用户可读写
+
 ### Internal
 
 - 新增 GitHub Actions CI（类型检查、单测、构建）

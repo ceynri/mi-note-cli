@@ -1,4 +1,4 @@
-import { readFile, writeFile, rm } from "node:fs/promises";
+import { readFile, writeFile, rm, chmod } from "node:fs/promises";
 import { join } from "node:path";
 import { getCacheDir, fileExists, ensureDir } from "./utils.js";
 import type { AuthInfo } from "./types.js";
@@ -133,10 +133,18 @@ async function launchPersistentBrowser(headless: boolean): Promise<
     if (!headless) {
       console.error("⚠️ 未检测到系统 Chrome，回退到 Playwright 自带 Chromium");
     }
-    return await chromium.launchPersistentContext(BROWSER_DATA_DIR, {
-      ...launchOptions,
-      channel: "chromium",
-    });
+    try {
+      return await chromium.launchPersistentContext(BROWSER_DATA_DIR, {
+        ...launchOptions,
+        channel: "chromium",
+      });
+    } catch (err) {
+      throw new Error(
+        "无法启动浏览器：未检测到系统 Chrome，也没有 Playwright 自带的 Chromium。" +
+          "请安装 Google Chrome，或运行 `npx playwright install chromium` 后重试。" +
+          `\n  原始错误：${(err as Error).message.split("\n")[0]}`,
+      );
+    }
   }
 }
 
@@ -281,5 +289,8 @@ async function loadCachedCookie(file: string): Promise<string | null> {
 
 async function saveCookie(cookie: string): Promise<void> {
   await ensureDir(getCacheDir());
-  await writeFile(COOKIE_FILE, cookie, "utf-8");
+  await chmod(getCacheDir(), 0o700);
+  await writeFile(COOKIE_FILE, cookie, { encoding: "utf-8", mode: 0o600 });
+  // mode 只对新建文件生效，已存在的旧文件需显式收紧
+  await chmod(COOKIE_FILE, 0o600);
 }
