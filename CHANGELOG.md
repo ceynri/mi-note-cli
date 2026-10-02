@@ -6,6 +6,10 @@
 
 ## [Unreleased] [[compare]](https://github.com/ceynri/mi-note-cli/compare/v0.3.1...HEAD)
 
+### Internal
+
+- 新增 GitHub Actions CI（类型检查、单测、构建）
+
 ## [0.3.1] - 2026-06-22 [[compare]](https://github.com/ceynri/mi-note-cli/compare/v0.3.0...v0.3.1)
 
 ### Changed
