@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { ensureAuth, peekOrRefreshAuth, refreshAuth } from "../auth.js";
 import { MiNoteClient } from "../client.js";
 import { readStdin, isJsonMode } from "../output.js";
@@ -45,6 +46,13 @@ export async function resolveContent(opts: {
     return await readFile(opts.file, "utf-8");
   }
   return await readStdin();
+}
+
+/** 内容里本地图片相对路径的基准目录：--file 时为文件所在目录，否则为当前目录 */
+export function contentBaseDir(opts: { file?: string; content?: string }): string {
+  return opts.content === undefined && opts.file
+    ? dirname(resolve(opts.file))
+    : process.cwd();
 }
 
 /** 解析 --limit：必须是正整数；未提供时返回 fallback */

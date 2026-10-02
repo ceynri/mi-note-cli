@@ -172,6 +172,11 @@ export function xmlToMarkdown(
 
   // 预处理：替换附件标记
   text = replaceAttachments(text, files, assetPrefix);
+  // 未登记在 setting.data 里的图片没有本地文件可指向，保留为 minote 引用，避免转换时丢图
+  text = text.replace(
+    /<img\s+[^>]*fileid="([^"]+)"[^>]*\/>/g,
+    (_m, fileId: string) => `![](minote://image/${fileId})`,
+  );
   // 移除格式标记
   text = text.replace(/<new-format\s*\/>/g, "");
   text = text.replace(/<0\/>/g, "");
@@ -418,6 +423,7 @@ function replaceAttachments(
 // ============ Markdown → XML ============
 
 const INDENT_TAB = "\t";
+const IMAGE_RE = /!\[[^\]]*\]\(([^)]+)\)/;
 
 /**
  * 将 Markdown 转换为小米笔记 XML 内容（用于创建/更新）。
@@ -499,7 +505,7 @@ export function markdownToXml(
     const line = rawLine.replace(/\s+$/g, "");
 
     // 图片：minote://image/{id} 或本地映射
-    const imageMatch = line.match(/!\[[^\]]*\]\(([^)]+)\)/);
+    const imageMatch = line.match(IMAGE_RE);
     if (imageMatch) {
       const fileId = resolveImageFileId(imageMatch[1], imageMap);
       if (fileId) {
@@ -610,6 +616,82 @@ function resolveImageFileId(
     return target.substring("minote://image/".length);
   }
   return imageMap.get(target);
+}
+
+/**
+ * 附件落盘引用 → fileId 映射，与 xmlToMarkdown 产出的 `<prefix><name>` 引用一一对应。
+ * 上行（markdownToXml）时传入，才能把本地 Markdown 里的图片还原成云端 <img>。
+ * 可传多个前缀以兼容不同位置/旧版本写出的引用。
+ */
+export function buildImageMap(
+  files: NoteFile[],
+  ...assetPrefixes: string[]
+): Map<string, string> {
+  const prefixes = assetPrefixes.length > 0 ? assetPrefixes : ["assets/"];
+  const map = new Map<string, string>();
+  for (const prefix of prefixes) {
+    for (const f of files) map.set(`${prefix}${f.name}`, f.fileId);
+  }
+  return map;
+}
+
+/** 每行第一个图片引用的 target（与 markdownToXml 的识别规则一致） */
+export function listImageTargets(markdown: string): string[] {
+  const targets: string[] = [];
+  for (const line of markdown.replace(/\r\n/g, "\n").split("\n")) {
+    const m = line.match(IMAGE_RE);
+    if (m) targets.push(m[1]);
+  }
+  return targets;
+}
+
+/** 是否为需要上传的本地图片引用（外链与 minote 引用之外的都算） */
+export function isLocalImageTarget(target: string): boolean {
+  return !/^https?:\/\//i.test(target) && !target.startsWith("minote://image/");
+}
+
+/**
+ * 找出 markdownToXml 无法还原、上传后会退化成纯文本的附件引用：
+ * - 不在 imageMap 里的本地图片（通常是文件找不到；外链 http(s) 图片按原样保留为文本，不算）
+ * - 与文字同行的图片（整行会被替换为 <img>，同行文字丢失）
+ * - 指向 assets/ 的音频/视频等非图片链接（暂不支持回写）
+ */
+export function findUnresolvedAttachments(
+  markdown: string,
+  imageMap: Map<string, string> = new Map(),
+): string[] {
+  const problems: string[] = [];
+  for (const raw of markdown.replace(/\r\n/g, "\n").split("\n")) {
+    const line = raw.trim();
+    const image = line.match(IMAGE_RE);
+    if (image && !/^https?:\/\//i.test(image[1])) {
+      if (!resolveImageFileId(image[1], imageMap)) {
+        problems.push(`找不到图片文件或格式不支持：${image[1]}`);
+      } else if (line !== image[0]) {
+        problems.push(`图片需独占一行：${line}`);
+      }
+    }
+    for (const m of line.matchAll(/(?<!!)\[[^\]]*\]\(([^)]+)\)/g)) {
+      if (/(^|\/)assets\//.test(m[1])) {
+        problems.push(`暂不支持回写的附件：${m[1]}`);
+      }
+    }
+  }
+  return problems;
+}
+
+/** 上行前的附件守护：存在会退化成纯文本的引用时直接报错，避免覆盖云端附件 */
+export function assertAttachmentsResolvable(
+  markdown: string,
+  imageMap: Map<string, string> = new Map(),
+): void {
+  const problems = findUnresolvedAttachments(markdown, imageMap);
+  if (problems.length > 0) {
+    throw new Error(
+      `内容里有无法回写到云端的附件引用，已中止以免丢失附件：\n  ${problems.join("\n  ")}\n` +
+        "  本地图片路径相对 Markdown 文件所在目录（--content / 标准输入时相对当前目录）。",
+    );
+  }
 }
 
 /** 从 XML 内容提取首行非空文本作为 snippet */

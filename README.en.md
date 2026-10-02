@@ -108,7 +108,13 @@ mi-note-cli create --title "With image" --content "See:
 ![图片](minote://image/xxxxxx)"
 ```
 
-The tool auto-converts `minote://image/{fileId}` into Xiaomi's image markup.
+The tool auto-converts `minote://image/{fileId}` into Xiaomi's image markup. You can also reference a local image file directly; it is uploaded automatically on write:
+
+```bash
+mi-note-cli create --file ./notes/trip.md   # ![](./photo.jpg) inside it gets uploaded
+```
+
+Markdown printed by `get` / `sync` can be edited and passed straight back to `update`: its image references are restored to the note's existing images. Images must sit on their own line; relative paths resolve against the Markdown file's directory (or the working directory for `--content` / stdin).
 
 ## Data Directories
 
@@ -181,7 +187,7 @@ When `fileNameTemplate` is unset, the behavior is equivalent to `${subject}` —
 
 > The project is in early stages with limited real-world usage, and the converter may have known or unknown gaps. Validate on a small subset first for important notes, and keep manual backups of critical content — feedback on incorrect conversions is very welcome.
 
-**Stably supported** (covered by both unit and integration round-trip tests): headings (H1–H3), ordered / unordered lists (including multi-level nesting and paragraph-broken numbering), checkboxes, blockquotes, horizontal rules, bold `**bold**` / italic `*italic*` / strikethrough `~~strike~~` / underline `<u>...</u>`, links, inline code, paragraphs, image attachments.
+**Stably supported** (covered by both unit and integration round-trip tests): headings (H1–H3), ordered / unordered lists (including multi-level nesting and paragraph-broken numbering), checkboxes, blockquotes, horizontal rules, bold `**bold**` / italic `*italic*` / strikethrough `~~strike~~` / underline `<u>...</u>`, links, inline code, paragraphs, image attachments. Audio/video attachments are export-only; notes containing them cannot be written back after local edits.
 
 **Currently unsupported**: tables, footnotes, definition lists, fenced code-block language tags, Setext-style headings (`===` / `---`), inline HTML other than `<u>`. These will be silently dropped or kept as literal text during conversion.
 

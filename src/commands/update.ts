@@ -1,5 +1,11 @@
-import { getClient, resolveContent } from "./shared.js";
-import { markdownToXml, extractSnippet } from "../converter.js";
+import { getClient, resolveContent, contentBaseDir } from "./shared.js";
+import {
+  markdownToXml,
+  extractSnippet,
+  parseNoteEntry,
+  buildImageMap,
+} from "../converter.js";
+import { uploadLocalImages, withAttachments } from "../images.js";
 import { buildExtraInfoString } from "../note.js";
 import { success, logInfo, fail } from "../output.js";
 import type { WriteNoteEntry } from "../types.js";
@@ -33,8 +39,20 @@ export async function updateCommand(
     const current = await client.getNote(id);
 
     const newContent = await resolveContent(opts);
-    const xmlContent =
-      newContent !== null ? markdownToXml(newContent) : current.content ?? "";
+    let xmlContent = current.content ?? "";
+    let setting = current.setting ?? { themeId: 0, stickyTime: 0, version: 0 };
+    if (newContent !== null) {
+      // get / sync 写出的附件引用按当前笔记附件还原，内容可原样 get → 改 → update；新的本地图片自动上传
+      const known = buildImageMap(parseNoteEntry(current).files, "assets/", "../assets/");
+      const { imageMap, uploaded } = await uploadLocalImages(
+        client,
+        newContent,
+        known,
+        [contentBaseDir(opts)],
+      );
+      xmlContent = markdownToXml(newContent, imageMap);
+      setting = withAttachments(setting, uploaded);
+    }
 
     const now = Date.now();
     const entry: WriteNoteEntry = {
@@ -45,7 +63,7 @@ export async function updateCommand(
       modifyDate: now,
       colorId: colorOverride ?? current.colorId ?? 0,
       content: xmlContent,
-      setting: current.setting ?? { themeId: 0, stickyTime: 0, version: 0 },
+      setting,
       folderId: opts.folder ?? String(current.folderId ?? "0"),
       alertDate: current.alertDate ?? 0,
       extraInfo: buildExtraInfoString(opts.title, normalizeExtraInfo(current.extraInfo)),
