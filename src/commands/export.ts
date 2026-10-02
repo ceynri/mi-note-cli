@@ -1,7 +1,7 @@
 import { getClient } from "./shared.js";
 import { exportNotes } from "../sync.js";
 import { resolveOutputDir } from "../config.js";
-import { isJsonMode, success, fail } from "../output.js";
+import { isJsonMode, success, fail, EXIT_PARTIAL_FAILURE } from "../output.js";
 
 interface ExportOptions {
   output?: string;
@@ -22,6 +22,7 @@ export async function exportCommand(opts: ExportOptions): Promise<void> {
     success(result, () => {
       // 过程已打印汇总
     });
+    if (result.errors.length > 0) process.exitCode = EXIT_PARTIAL_FAILURE;
   } catch (err) {
     fail(err);
   }

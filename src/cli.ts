@@ -56,6 +56,7 @@ program.addHelpText(
 输出约定:
   全局 --json 下，所有命令统一输出 JSON：成功 {"ok":true,"data":...}，失败 {"ok":false,"error":"..."}。
   失败时进程以非零码退出。日志/进度走 stderr，结构化结果走 stdout，可安全用管道解析。
+  export / sync 部分条目失败时仍输出 ok:true，失败项在 data.errors，退出码为 2。
 
 笔记内容格式:
   读取(get)默认把小米笔记转成 Markdown；写入(create/update)接受 Markdown，自动转回小米格式。
@@ -239,6 +240,7 @@ const sync = program
   cloud-first/local-first 已声明优先方，冲突按优先方自动解决；
   two-way/manual 遇到「双改」「一端删另一端改」等真冲突会停下：交互式询问，
   非交互(--json/无 TTY)则跳过该条并在结果里报告，绝不擅自删数据。
+  交互询问时可按 d 查看云端与本地的差异。同步删除云端笔记只移到回收站。
 
 示例:
   mi-note-cli sync -o ./notes --dry-run        # 预览将发生什么
